@@ -142,7 +142,8 @@ func (ph *ProgressHandler) process() {
 
 		// Update totalSteps if a plan summary appears
 		if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
-			newTotal := entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
+			// Double the total steps to account for both start and completion events
+			newTotal := (entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove) * 2
 			if ph.totalSteps == 0 || newTotal > ph.totalSteps {
 				ph.totalSteps = newTotal
 				ph.progressBarWidth = ph.totalSteps
@@ -166,6 +167,17 @@ func (ph *ProgressHandler) process() {
 				ph.lastFullMessage = msg
 			}
 		} else if entry.Type == "apply_complete" {
+			if ph.currentStep < ph.totalSteps {
+				ph.currentStep++
+			}
+			if currentResourceAddr != "" {
+				ph.resourceMessages[currentResourceAddr] = msg
+				ph.lastFullMessage = msg
+			} else {
+				ph.lastFullMessage = msg
+			}
+		} else if entry.Type == "apply_progress" {
+			// Don't increment step, just update message
 			if currentResourceAddr != "" {
 				ph.resourceMessages[currentResourceAddr] = msg
 				ph.lastFullMessage = msg
@@ -225,7 +237,8 @@ func GetProgressOutput(reader io.Reader) (string, error) {
 			var entry TerraformLogEntry
 			if err := json.Unmarshal([]byte(line), &entry); err == nil {
 				if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
-					totalSteps = entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
+					// Double the total steps to account for both start and completion events
+					totalSteps = (entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove) * 2
 					progressBarWidth = totalSteps // Set bar width equal to total steps
 					isPlanning = false            // We're done planning
 					break                         // Found the plan summary
@@ -246,7 +259,8 @@ func GetProgressOutput(reader io.Reader) (string, error) {
 				if entry.Type == "planned_change" && entry.Change != nil && entry.Change.Resource.Addr != "" {
 					plannedResources[entry.Change.Resource.Addr] = true
 				} else if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
-					totalSteps = entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
+					// Double the total steps to account for both start and completion events
+					totalSteps = (entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove) * 2
 					progressBarWidth = totalSteps // Set bar width equal to total steps
 					isPlanning = false            // We're done planning
 					break
@@ -254,7 +268,8 @@ func GetProgressOutput(reader io.Reader) (string, error) {
 			}
 		}
 		if totalSteps == 0 {
-			totalSteps = len(plannedResources)
+			// Double the total steps to account for both start and completion events
+			totalSteps = len(plannedResources) * 2
 			progressBarWidth = totalSteps // Set bar width equal to total steps
 		}
 		scanner = bufio.NewScanner(strings.NewReader(strings.Join(lines, "\n")))
@@ -282,7 +297,8 @@ func GetProgressOutput(reader io.Reader) (string, error) {
 
 		// Update totalSteps if a plan summary appears mid-stream
 		if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
-			newTotal := entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
+			// Double the total steps to account for both start and completion events
+			newTotal := (entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove) * 2
 			if totalSteps == 0 || newTotal > totalSteps {
 				totalSteps = newTotal
 				progressBarWidth = totalSteps // Update bar width when total steps changes
@@ -305,6 +321,17 @@ func GetProgressOutput(reader io.Reader) (string, error) {
 				lastFullMessage = msg
 			}
 		} else if entry.Type == "apply_complete" {
+			if currentStep < totalSteps {
+				currentStep++
+			}
+			if currentResourceAddr != "" {
+				resourceMessages[currentResourceAddr] = msg
+				lastFullMessage = msg
+			} else {
+				lastFullMessage = msg
+			}
+		} else if entry.Type == "apply_progress" {
+			// Don't increment step, just update message
 			if currentResourceAddr != "" {
 				resourceMessages[currentResourceAddr] = msg
 				lastFullMessage = msg
@@ -368,23 +395,30 @@ func getProgressString(current, total, width int, message string, isPlanning boo
 		}
 		output = fmt.Sprintf("[%s] %s", bar, message)
 	} else {
+		// Calculate progress bar width based on total steps
+		barWidth := 20 // Default width
+		if total > 0 {
+			barWidth = total // Use total steps as width
+		}
+
+		// Calculate filled portion
 		percent := float64(current) / float64(total)
-		filledWidth := int(percent * float64(width))
+		filledWidth := int(percent * float64(barWidth))
 		if filledWidth < 0 {
 			filledWidth = 0
-		} else if filledWidth > width {
-			filledWidth = width
+		} else if filledWidth > barWidth {
+			filledWidth = barWidth
 		}
 
 		var bar string
 		if isPlanning {
 			// Center "PLANNING" in the bar
 			planningText := "PLANNING"
-			spacesBefore := (width - len(planningText)) / 2
-			spacesAfter := width - len(planningText) - spacesBefore
+			spacesBefore := (barWidth - len(planningText)) / 2
+			spacesAfter := barWidth - len(planningText) - spacesBefore
 			bar = strings.Repeat(" ", spacesBefore) + planningText + strings.Repeat(" ", spacesAfter)
 		} else {
-			bar = strings.Repeat("=", filledWidth) + strings.Repeat(" ", width-filledWidth)
+			bar = strings.Repeat("=", filledWidth) + strings.Repeat(" ", barWidth-filledWidth)
 		}
 		output = fmt.Sprintf("(%d)[%s](%d) %s", current, bar, total, message)
 	}
