@@ -1,10 +1,10 @@
 package progress_test
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -78,138 +78,133 @@ var mockTerraformOutput = `
 `
 
 func TestProcessJSONStream(t *testing.T) {
-	// Extract JSON lines from the provided sample log
-	// Note: Manually curating this from the log. In a real scenario, ensure only JSON lines are fed.
+	// Create a reader with the mock Terraform output
+	reader := strings.NewReader(mockTerraformOutput)
 
-	// Keep a reference to the original os.Stdout
-	originalStdout := os.Stdout
-	// Create a pipe to capture stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	// Create a progress handler
+	handler := progress.NewProgressHandler(reader)
 
-	// Create a buffer to capture the output
-	var outputBuf bytes.Buffer
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	// Run the function in a goroutine so we can read from the pipe
-	// and it doesn't block indefinitely if ProcessJSONStream has issues.
-	errCh := make(chan error)
-	go func() {
-		errCh <- progress.ProcessJSONStream(strings.NewReader(mockTerraformOutput), &outputBuf)
-	}()
+	// Read all lines with context
+	var lines []string
+	var err error
 
-	// Close the write end of the pipe on the main goroutine side
-	// This will signal EOF to the reader.
-	w.Close()
-
-	// Read all output from the read end of the pipe
-	var buf bytes.Buffer
-	_, copyErr := io.Copy(&buf, r)
-
-	// Restore os.Stdout
-	os.Stdout = originalStdout
-
-	// Wait for ProcessJSONStream to finish
-	processErr := <-errCh
-
-	if processErr != nil {
-		t.Errorf("ProcessJSONStream returned an error: %v", processErr)
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("Test timed out after 5 seconds")
+		default:
+			line, readErr := handler.ReadLine()
+			if readErr != nil {
+				if readErr == io.EOF {
+					goto done
+				}
+				err = readErr
+				return
+			}
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
 	}
-	if copyErr != nil {
-		t.Errorf("Error capturing stdout: %v", copyErr)
+done:
+
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+		return
 	}
 
-	output := outputBuf.String()
-
-	// --- Assertions ---
+	// Verify we got some output
+	if len(lines) == 0 {
+		t.Error("Expected non-empty output")
+		return
+	}
 
 	// Check for total steps
-	// From the log: "Plan: 18 to add, 0 to change, 0 to destroy."
 	expectedTotalStepsStr := "(18)"
-	if !strings.Contains(output, expectedTotalStepsStr) {
-		t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, output)
+	foundTotalSteps := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedTotalStepsStr) {
+			foundTotalSteps = true
+			break
+		}
+	}
+	if !foundTotalSteps {
+		t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, strings.Join(lines, "\n"))
 	}
 
 	// Check for a specific "Creating..." message
-	// e.g., "tls_private_key.ssh: Creating..."
-	// The progress bar updates rapidly, so we check for the message substring
 	expectedCreatingMessage := "tls_private_key.ssh: Creating..."
-	if !strings.Contains(output, expectedCreatingMessage) {
-		t.Errorf("Output does not contain expected creating message substring '%s'. Output:\n%s", expectedCreatingMessage, output)
+	foundCreatingMessage := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedCreatingMessage) {
+			foundCreatingMessage = true
+			break
+		}
+	}
+	if !foundCreatingMessage {
+		t.Errorf("Output does not contain expected creating message '%s'. Output:\n%s", expectedCreatingMessage, strings.Join(lines, "\n"))
 	}
 
 	// Check for a specific "Creation complete..." message
-	expectedCompleteMessage := "Creation complete" // Part of the message
-	if !strings.Contains(output, expectedCompleteMessage) {
-		t.Errorf("Output does not contain expected completion message substring '%s'. Output:\n%s", expectedCompleteMessage, output)
+	expectedCompleteMessage := "Creation complete"
+	foundCompleteMessage := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedCompleteMessage) {
+			foundCompleteMessage = true
+			break
+		}
+	}
+	if !foundCompleteMessage {
+		t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, strings.Join(lines, "\n"))
 	}
 
 	// Check for the final "Apply complete!" message
-	// The message is truncated to 48 characters with ...
 	expectedApplyComplete := "Apply complete! Resources: 18 added, 0 change..."
-	if !strings.Contains(output, expectedApplyComplete) {
-		t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, output)
+	foundApplyComplete := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedApplyComplete) {
+			foundApplyComplete = true
+			break
+		}
+	}
+	if !foundApplyComplete {
+		t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, strings.Join(lines, "\n"))
 	}
 
 	// Check for progress bar structure (e.g., presence of '[=')
-	// This is a bit tricky because the bar changes. We look for a common pattern.
-	// The first step would be like "1[=...](18)"
-	// A more robust check might be to parse the output lines, but for now, a substring check.
-	if !strings.Contains(output, "[=") && !strings.Contains(output, "[-/-]") { // [-/-] is for totalSteps=0 case
-		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", output)
-	}
-
-	// Check that a newline was printed after the final progress bar for apply summary
-	// The "Apply complete!" message should be followed by a newline (handled by fmt.Println in ProcessJSONStream)
-	// and then the "Outputs: 8" message starts on a new line in the *original* terraform output,
-	// our progress bar code should also ensure it prints a newline.
-
-	// A simple check for multiple lines at the end:
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) > 0 {
-		lastLine := lines[len(lines)-1]
-		// The very last thing printed by printProgress before the final newline would be the "Outputs: 8" message
-		// or the "Processing outputs..." message.
-		if !strings.Contains(lastLine, "Outputs: 8") && !strings.Contains(lastLine, "Processing outputs...") {
-			// t.Logf("Last line of output: %s", lastLine) // For debugging
+	foundProgressBar := false
+	for _, line := range lines {
+		if strings.Contains(line, "[=") || strings.Contains(line, "[-/-]") {
+			foundProgressBar = true
+			break
 		}
-	} else {
-		t.Errorf("Expected multiple lines of output, got 0 or 1 after split and trim. Output:\n%s", output)
 	}
-
-	// A more detailed check might involve capturing each line distinctly,
-	// which is harder with `
-	// clearing lines unless the terminal emulation is very precise.
-	// For now, these substring checks cover the main aspects.
-}
-
-type delayedReader struct {
-	lines []string
-	idx   int
-	delay time.Duration
-}
-
-func (dr *delayedReader) Read(p []byte) (int, error) {
-	if dr.idx >= len(dr.lines) {
-		return 0, io.EOF
+	if !foundProgressBar {
+		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
 	}
-	line := dr.lines[dr.idx] + "\n"
-	copy(p, line)
-	dr.idx++
-	time.Sleep(dr.delay)
-	return len(line), nil
 }
 
 func TestProcessJSONStream_Visual(t *testing.T) {
 	// This test prints the progress bar and messages to the terminal for visual inspection.
+	reader := strings.NewReader(mockTerraformOutput)
+	handler := progress.NewProgressHandler(reader)
 
-	dr := &delayedReader{
-		lines: strings.Split(strings.TrimSpace(mockTerraformOutput), "\n"),
-		delay: 500 * time.Millisecond,
-	}
-
-	err := progress.ProcessJSONStream(dr, os.Stdout)
-	if err != nil {
-		t.Errorf("ProcessJSONStream returned an error: %v", err)
+	for {
+		line, err := handler.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Errorf("Unexpected error: %v", err)
+			return
+		}
+		if line != "" {
+			fmt.Println(line)
+		}
 	}
 }
 
@@ -353,4 +348,345 @@ func TestGetProgressOutputWithPrint(t *testing.T) {
 		}
 	}
 	fmt.Println("=== End of Detailed Inspection ===")
+}
+
+func TestProgressHandler(t *testing.T) {
+	// Create a reader with the mock Terraform output
+	reader := strings.NewReader(mockTerraformOutput)
+
+	// Create a progress handler
+	handler := progress.NewProgressHandler(reader)
+
+	// Read all lines
+	var lines []string
+	for {
+		line, err := handler.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Errorf("Unexpected error: %v", err)
+			return
+		}
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	// Verify we got some output
+	if len(lines) == 0 {
+		t.Error("Expected non-empty output")
+		return
+	}
+
+	// Check for total steps
+	expectedTotalStepsStr := "(18)"
+	foundTotalSteps := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedTotalStepsStr) {
+			foundTotalSteps = true
+			break
+		}
+	}
+	if !foundTotalSteps {
+		t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, strings.Join(lines, "\n"))
+	}
+
+	// Check for a specific "Creating..." message
+	expectedCreatingMessage := "tls_private_key.ssh: Creating..."
+	foundCreatingMessage := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedCreatingMessage) {
+			foundCreatingMessage = true
+			break
+		}
+	}
+	if !foundCreatingMessage {
+		t.Errorf("Output does not contain expected creating message '%s'. Output:\n%s", expectedCreatingMessage, strings.Join(lines, "\n"))
+	}
+
+	// Check for a specific "Creation complete..." message
+	expectedCompleteMessage := "Creation complete"
+	foundCompleteMessage := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedCompleteMessage) {
+			foundCompleteMessage = true
+			break
+		}
+	}
+	if !foundCompleteMessage {
+		t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, strings.Join(lines, "\n"))
+	}
+
+	// Check for the final "Apply complete!" message
+	expectedApplyComplete := "Apply complete! Resources: 18 added, 0 change..."
+	foundApplyComplete := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedApplyComplete) {
+			foundApplyComplete = true
+			break
+		}
+	}
+	if !foundApplyComplete {
+		t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, strings.Join(lines, "\n"))
+	}
+
+	// Check for progress bar structure (e.g., presence of '[=')
+	foundProgressBar := false
+	for _, line := range lines {
+		if strings.Contains(line, "[=") || strings.Contains(line, "[-/-]") {
+			foundProgressBar = true
+			break
+		}
+	}
+	if !foundProgressBar {
+		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+// seekableReader is a test helper that wraps a string reader with seeking capability
+type seekableReader struct {
+	content string
+	pos     int64
+}
+
+func newSeekableReader(content string) *seekableReader {
+	return &seekableReader{content: content}
+}
+
+func (r *seekableReader) Read(p []byte) (int, error) {
+	if r.pos >= int64(len(r.content)) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.content[r.pos:])
+	r.pos += int64(n)
+	if r.pos >= int64(len(r.content)) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+func (r *seekableReader) Seek(offset int64, whence int) (int64, error) {
+	var newPos int64
+	switch whence {
+	case io.SeekStart:
+		newPos = offset
+	case io.SeekCurrent:
+		newPos = r.pos + offset
+	case io.SeekEnd:
+		newPos = int64(len(r.content)) + offset
+	default:
+		return 0, fmt.Errorf("invalid whence")
+	}
+	if newPos < 0 {
+		return 0, fmt.Errorf("negative position")
+	}
+	if newPos > int64(len(r.content)) {
+		newPos = int64(len(r.content))
+	}
+	r.pos = newPos
+	return newPos, nil
+}
+
+func TestProgressHandler_Streaming(t *testing.T) {
+	// Create a seekable reader with the mock Terraform output
+	reader := newSeekableReader(mockTerraformOutput)
+
+	// Create a progress handler
+	handler := progress.NewProgressHandler(reader)
+
+	// Track the lines we receive
+	var lines []string
+	var errors []error
+
+	// Read all lines with context to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("Test timed out after 5 seconds")
+		default:
+			line, err := handler.ReadLine()
+			if err != nil {
+				if err == io.EOF {
+					goto done
+				}
+				errors = append(errors, err)
+				goto done
+			}
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+	}
+done:
+
+	// Verify we got some output
+	if len(lines) == 0 {
+		t.Error("Expected non-empty output")
+		return
+	}
+
+	// Verify no errors occurred
+	if len(errors) > 0 {
+		t.Errorf("Unexpected errors: %v", errors)
+		return
+	}
+
+	// Test the output format and content
+	t.Run("Output Format", func(t *testing.T) {
+		// Check for total steps
+		expectedTotalStepsStr := "(18)"
+		foundTotalSteps := false
+		for _, line := range lines {
+			if strings.Contains(line, expectedTotalStepsStr) {
+				foundTotalSteps = true
+				break
+			}
+		}
+		if !foundTotalSteps {
+			t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, strings.Join(lines, "\n"))
+		}
+
+		// Check for a specific "Creating..." message
+		expectedCreatingMessage := "tls_private_key.ssh: Creating..."
+		foundCreatingMessage := false
+		for _, line := range lines {
+			if strings.Contains(line, expectedCreatingMessage) {
+				foundCreatingMessage = true
+				break
+			}
+		}
+		if !foundCreatingMessage {
+			t.Errorf("Output does not contain expected creating message '%s'. Output:\n%s", expectedCreatingMessage, strings.Join(lines, "\n"))
+		}
+
+		// Check for a specific "Creation complete..." message
+		expectedCompleteMessage := "Creation complete"
+		foundCompleteMessage := false
+		for _, line := range lines {
+			if strings.Contains(line, expectedCompleteMessage) {
+				foundCompleteMessage = true
+				break
+			}
+		}
+		if !foundCompleteMessage {
+			t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, strings.Join(lines, "\n"))
+		}
+
+		// Check for the final "Apply complete!" message
+		expectedApplyComplete := "Apply complete! Resources: 18 added, 0 change..."
+		foundApplyComplete := false
+		for _, line := range lines {
+			if strings.Contains(line, expectedApplyComplete) {
+				foundApplyComplete = true
+				break
+			}
+		}
+		if !foundApplyComplete {
+			t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, strings.Join(lines, "\n"))
+		}
+
+		// Check for progress bar structure (e.g., presence of '[=')
+		foundProgressBar := false
+		for _, line := range lines {
+			if strings.Contains(line, "[=") || strings.Contains(line, "[-/-]") {
+				foundProgressBar = true
+				break
+			}
+		}
+		if !foundProgressBar {
+			t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
+		}
+	})
+
+	// Test the sequence of messages
+	t.Run("Message Sequence", func(t *testing.T) {
+		// Verify planning phase comes before apply phase
+		planningIndex := -1
+		applyIndex := -1
+		for i, line := range lines {
+			if strings.Contains(line, "PLANNING") {
+				planningIndex = i
+			}
+			if strings.Contains(line, "Creating...") {
+				applyIndex = i
+				break
+			}
+		}
+		if planningIndex == -1 {
+			t.Error("Planning phase not found in output")
+		}
+		if applyIndex == -1 {
+			t.Error("Apply phase not found in output")
+		}
+		if planningIndex > applyIndex {
+			t.Error("Planning phase should come before apply phase")
+		}
+
+		// Verify progress increases
+		lastProgress := -1
+		for _, line := range lines {
+			if strings.Contains(line, "[=") {
+				// Extract current step from line like "(1)[=...](18)"
+				parts := strings.Split(line, "[")
+				if len(parts) > 0 {
+					stepStr := strings.Trim(parts[0], "()")
+					if step, err := strconv.Atoi(stepStr); err == nil {
+						if lastProgress != -1 && step < lastProgress {
+							t.Errorf("Progress decreased from %d to %d", lastProgress, step)
+						}
+						lastProgress = step
+					}
+				}
+			}
+		}
+	})
+
+	// Test error handling
+	t.Run("Error Handling", func(t *testing.T) {
+		// Create a reader that will return an error
+		errorReader := &errorReader{err: fmt.Errorf("test error")}
+		handler := progress.NewProgressHandler(errorReader)
+
+		// Read the initial progress bar (should always be present)
+		_, _ = handler.ReadLine()
+
+		// Read a line and expect an error, with timeout to avoid race
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Panic occurred during error handling: %v", r)
+			}
+		}()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := handler.ReadLine()
+			errCh <- err
+		}()
+
+		select {
+		case err := <-errCh:
+			if err == nil {
+				t.Error("Expected error from errorReader")
+				return
+			}
+			if err.Error() != "test error" {
+				t.Errorf("Expected error 'test error', got '%v'", err)
+			}
+		case <-time.After(500 * time.Millisecond):
+			t.Error("Timed out waiting for error from errorReader")
+		}
+	})
+}
+
+// errorReader is a test helper that always returns an error
+type errorReader struct {
+	err error
+}
+
+func (r *errorReader) Read(p []byte) (int, error) {
+	return 0, r.err
 }

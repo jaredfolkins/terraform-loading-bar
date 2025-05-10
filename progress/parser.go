@@ -67,70 +67,67 @@ type OutputEntry struct {
 	Action    string      `json:"action,omitempty"` // For planned outputs
 }
 
-// ProcessJSONStream reads Terraform JSON output from reader, parses it,
-// and prints a progress bar to the provided writer.
-func ProcessJSONStream(reader io.Reader, writer io.Writer) error {
-	scanner := bufio.NewScanner(reader)
-	totalSteps := 0
-	currentStep := 0
-	progressBarWidth := 0            // Will be calculated based on total steps
-	isPlanning := true               // Track if we're in planning phase
-	lastFullMessage := "Planning..." // Set initial message
+// ProgressHandler handles streaming progress for Terraform operations
+type ProgressHandler struct {
+	reader           io.Reader
+	scanner          *bufio.Scanner
+	totalSteps       int
+	currentStep      int
+	progressBarWidth int
+	isPlanning       bool
+	lastFullMessage  string
+	resourceMessages map[string]string
+	lineChan         chan string
+	errChan          chan error
+}
 
-	// First pass to estimate total steps from the plan summary or count resources
-	var lines []string
-	seeker, isSeeker := reader.(io.Seeker)
-	if isSeeker {
-		initialPos, _ := seeker.Seek(0, io.SeekCurrent)
-		scannerForCount := bufio.NewScanner(reader)
-		for scannerForCount.Scan() {
-			line := scannerForCount.Text()
-			lines = append(lines, line)
-			var entry TerraformLogEntry
-			if err := json.Unmarshal([]byte(line), &entry); err == nil {
-				if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
-					totalSteps = entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
-					progressBarWidth = totalSteps // Set bar width equal to total steps
-					isPlanning = false            // We're done planning
-					break                         // Found the plan summary
-				}
-			}
-		}
-		seeker.Seek(initialPos, io.SeekStart) // Reset reader for the main processing pass
-		scanner = bufio.NewScanner(reader)    // Re-initialize scanner
+// NewProgressHandler creates a new ProgressHandler for the given reader
+func NewProgressHandler(reader io.Reader) *ProgressHandler {
+	ph := &ProgressHandler{
+		reader:           reader,
+		scanner:          bufio.NewScanner(reader),
+		totalSteps:       0,
+		currentStep:      0,
+		progressBarWidth: 0,
+		isPlanning:       true,
+		lastFullMessage:  "Planning...",
+		resourceMessages: make(map[string]string),
+		lineChan:         make(chan string),
+		errChan:          make(chan error),
 	}
 
-	// If totalSteps is still 0 after the first pass (or if it wasn't a seeker),
-	// we can try to count distinct resources from planned_change as a fallback.
-	if totalSteps == 0 && len(lines) > 0 {
-		plannedResources := make(map[string]bool)
-		for _, line := range lines {
-			var entry TerraformLogEntry
-			if err := json.Unmarshal([]byte(line), &entry); err == nil {
-				if entry.Type == "planned_change" && entry.Change != nil && entry.Change.Resource.Addr != "" {
-					plannedResources[entry.Change.Resource.Addr] = true
-				} else if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
-					totalSteps = entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
-					progressBarWidth = totalSteps // Set bar width equal to total steps
-					isPlanning = false            // We're done planning
-					break
-				}
-			}
-		}
-		if totalSteps == 0 {
-			totalSteps = len(plannedResources)
-			progressBarWidth = totalSteps // Set bar width equal to total steps
-		}
-		scanner = bufio.NewScanner(strings.NewReader(strings.Join(lines, "\n")))
+	// Start processing in a goroutine
+	go ph.process()
+
+	return ph
+}
+
+// ReadLine reads the next line of progress output
+func (ph *ProgressHandler) ReadLine() (string, error) {
+	select {
+	case line := <-ph.lineChan:
+		return line, nil
+	case err := <-ph.errChan:
+		return "", err
+	}
+}
+
+// process handles the actual processing of the JSON stream
+func (ph *ProgressHandler) process() {
+	defer close(ph.lineChan)
+	defer close(ph.errChan)
+
+	// Send initial progress bar
+	ph.lineChan <- getProgressString(ph.currentStep, ph.totalSteps, ph.progressBarWidth, ph.lastFullMessage, ph.isPlanning)
+
+	// Check for scanner errors before the main loop
+	if err := ph.scanner.Err(); err != nil {
+		ph.errChan <- err
+		return
 	}
 
-	// Print initial progress bar
-	printProgress(writer, currentStep, totalSteps, progressBarWidth, lastFullMessage, isPlanning)
-
-	resourceMessages := make(map[string]string)
-
-	for scanner.Scan() {
-		line := scanner.Text()
+	for ph.scanner.Scan() {
+		line := ph.scanner.Text()
 		var entry TerraformLogEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
@@ -143,116 +140,64 @@ func ProcessJSONStream(reader io.Reader, writer io.Writer) error {
 			currentResourceAddr = entry.Hook.Resource.Addr
 		}
 
-		// Update totalSteps if a plan summary appears mid-stream
+		// Update totalSteps if a plan summary appears
 		if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
 			newTotal := entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
-			if totalSteps == 0 || newTotal > totalSteps {
-				totalSteps = newTotal
-				progressBarWidth = totalSteps // Update bar width when total steps changes
+			if ph.totalSteps == 0 || newTotal > ph.totalSteps {
+				ph.totalSteps = newTotal
+				ph.progressBarWidth = ph.totalSteps
 			}
-			isPlanning = false // We're done planning
-			lastFullMessage = msg
-			printProgress(writer, currentStep, totalSteps, progressBarWidth, lastFullMessage, isPlanning)
+			ph.isPlanning = false
+			ph.lastFullMessage = msg
+			ph.lineChan <- getProgressString(ph.currentStep, ph.totalSteps, ph.progressBarWidth, ph.lastFullMessage, ph.isPlanning)
 			continue
 		}
 
 		if entry.Type == "apply_start" {
-			if currentStep < totalSteps {
-				currentStep++
+			if ph.currentStep < ph.totalSteps {
+				ph.currentStep++
 			}
 			if currentResourceAddr != "" {
-				resourceMessages[currentResourceAddr] = msg
-				lastFullMessage = msg
+				ph.resourceMessages[currentResourceAddr] = msg
+				ph.lastFullMessage = msg
 			} else {
-				lastFullMessage = msg
+				ph.lastFullMessage = msg
 			}
 		} else if entry.Type == "apply_complete" {
 			if currentResourceAddr != "" {
-				resourceMessages[currentResourceAddr] = msg
-				lastFullMessage = msg
+				ph.resourceMessages[currentResourceAddr] = msg
+				ph.lastFullMessage = msg
 			} else {
-				lastFullMessage = msg
+				ph.lastFullMessage = msg
 			}
 		} else if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "apply" {
-			if currentStep < totalSteps {
-				currentStep = totalSteps
+			if ph.currentStep < ph.totalSteps {
+				ph.currentStep = ph.totalSteps
 			}
-			lastFullMessage = msg
+			ph.lastFullMessage = msg
 		} else if entry.Type == "outputs" {
-			lastFullMessage = "Processing outputs..."
+			ph.lastFullMessage = "Processing outputs..."
 		} else if msg != "" && entry.Level == "error" {
-			fmt.Fprintf(writer, "\nTERRAFORM ERROR: %s\n", msg)
-			lastFullMessage = msg
+			ph.lineChan <- fmt.Sprintf("TERRAFORM ERROR: %s", msg)
+			ph.lastFullMessage = msg
 		} else if msg != "" {
-			lastFullMessage = msg
+			ph.lastFullMessage = msg
 		}
 
-		printProgress(writer, currentStep, totalSteps, progressBarWidth, lastFullMessage, isPlanning)
+		ph.lineChan <- getProgressString(ph.currentStep, ph.totalSteps, ph.progressBarWidth, ph.lastFullMessage, ph.isPlanning)
 
 		if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "apply" {
-			fmt.Fprintln(writer)
+			ph.lineChan <- ""
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading input: %w", err)
+	if err := ph.scanner.Err(); err != nil {
+		ph.errChan <- err
+		return
 	}
 
-	fmt.Fprintln(writer)
-	return nil
-}
-
-// printProgress prints the progress bar to the provided writer and returns the formatted output string
-func printProgress(writer io.Writer, current, total, width int, message string, isPlanning bool) string {
-	// Sanitize message
-	message = strings.ReplaceAll(message, "\n", " ")
-	message = strings.ReplaceAll(message, "\r", " ")
-	message = strings.TrimSpace(message)
-
-	// Trim message to 48 chars with 3 dots
-	maxMsgLen := 48
-	if len(message) > maxMsgLen {
-		message = message[:maxMsgLen-3] + "..."
-	}
-
-	var output string
-	if total == 0 {
-		// During initial planning phase, show a fixed width bar
-		width = 20 // Use a reasonable default width when total is unknown
-		var bar string
-		if isPlanning {
-			planningText := "PLANNING"
-			spacesBefore := (width - len(planningText)) / 2
-			spacesAfter := width - len(planningText) - spacesBefore
-			bar = strings.Repeat(" ", spacesBefore) + planningText + strings.Repeat(" ", spacesAfter)
-		} else {
-			bar = strings.Repeat("-", width)
-		}
-		output = fmt.Sprintf("\r\033[K[%s] %s", bar, message)
-	} else {
-		percent := float64(current) / float64(total)
-		filledWidth := int(percent * float64(width))
-		if filledWidth < 0 {
-			filledWidth = 0
-		} else if filledWidth > width {
-			filledWidth = width
-		}
-
-		var bar string
-		if isPlanning {
-			// Center "PLANNING" in the bar
-			planningText := "PLANNING"
-			spacesBefore := (width - len(planningText)) / 2
-			spacesAfter := width - len(planningText) - spacesBefore
-			bar = strings.Repeat(" ", spacesBefore) + planningText + strings.Repeat(" ", spacesAfter)
-		} else {
-			bar = strings.Repeat("=", filledWidth) + strings.Repeat(" ", width-filledWidth)
-		}
-		output = fmt.Sprintf("\r\033[K(%d)[%s](%d) %s", current, bar, total, message)
-	}
-
-	fmt.Fprint(writer, output)
-	return output
+	// Signal EOF after processing all output
+	ph.errChan <- io.EOF
 }
 
 // GetProgressOutput reads Terraform JSON output from reader and returns the progress bar output as a string.
