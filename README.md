@@ -12,6 +12,84 @@ A Go tool that provides a visual progress bar for Terraform operations by parsin
 - Clean, formatted output
 - JSON stream parsing for accurate progress tracking
 
+### Using with Let'em Cook! (LEMC)
+
+You can integrate the progress bar with [Let'em Cook! (LEMC)](https://github.com/jaredfolkins/letemcook) to stream the UI to the browser. Here's an example that shows how to wrap the progress bar output with LEMC's UI streaming verbs:
+
+```go
+package main
+
+import (
+    "fmt"
+    "os"
+    "os/exec"
+    "strings"
+    "github.com/jaredfolkins/terraform-loading-bar/progress"
+)
+
+func main() {
+    // Initialize Terraform
+    initCmd := exec.Command("terraform", "init")
+    initCmd.Stdout = os.Stdout
+    initCmd.Stderr = os.Stderr
+    if err := initCmd.Run(); err != nil {
+        panic(err)
+    }
+
+    // Create plan
+    planCmd := exec.Command("terraform", "plan", "-out", "terraform.plan")
+    planCmd.Stdout = os.Stdout
+    planCmd.Stderr = os.Stderr
+    if err := planCmd.Run(); err != nil {
+        panic(err)
+    }
+
+    // Apply with JSON output
+    applyCmd := exec.Command("terraform", "apply", "-json", "terraform.plan")
+    applyOutput, err := applyCmd.StdoutPipe()
+    if err != nil {
+        panic(err)
+    }
+    applyCmd.Stderr = os.Stderr
+
+    // Start the apply command
+    if err := applyCmd.Start(); err != nil {
+        panic(err)
+    }
+
+    // Get the progress output as a string
+    output, err := progress.GetProgressOutput(applyOutput)
+    if err != nil {
+        panic(err)
+    }
+
+    // Stream the output to LEMC's UI
+    // Each line of the progress bar output is wrapped with LEMC's UI streaming verbs
+    lines := strings.Split(output, "\n")
+    for _, line := range lines {
+        if line != "" {
+            // Send the line to LEMC's UI buffer with trunc
+            fmt.Printf("lemc.html.buffer; %s\n", strings.TrimSpace(line))
+            fmt.Println("lemc.html.trunc;")
+        }
+    }
+
+    // Wait for the apply command to complete
+    if err := applyCmd.Wait(); err != nil {
+        panic(err)
+    }
+}
+```
+
+This example:
+1. Initializes Terraform and creates a plan
+2. Runs the apply command with JSON output
+3. Gets the progress bar output as a string
+4. Streams each line of the progress bar to LEMC's UI using the `lemc.html.buffer` and `lemc.html.trunc` verbs
+5. The progress bar will be displayed in real-time in the LEMC web interface
+
+The output will be streamed to the browser with a nice progress bar showing the status of your Terraform operations. Using `trunc` ensures that each line replaces the previous one, creating a smooth progress bar animation.
+
 ## Installation
 
 ```bash
@@ -192,84 +270,6 @@ The tool will display any Terraform errors in a clear format:
 ```
 TERRAFORM ERROR: error message
 ```
-
-### Using with Let'em Cook! (LEMC)
-
-You can integrate the progress bar with [Let'em Cook! (LEMC)](https://github.com/jaredfolkins/letemcook) to stream the UI to the browser. Here's an example that shows how to wrap the progress bar output with LEMC's UI streaming verbs:
-
-```go
-package main
-
-import (
-    "fmt"
-    "os"
-    "os/exec"
-    "strings"
-    "github.com/jaredfolkins/terraform-loading-bar/progress"
-)
-
-func main() {
-    // Initialize Terraform
-    initCmd := exec.Command("terraform", "init")
-    initCmd.Stdout = os.Stdout
-    initCmd.Stderr = os.Stderr
-    if err := initCmd.Run(); err != nil {
-        panic(err)
-    }
-
-    // Create plan
-    planCmd := exec.Command("terraform", "plan", "-out", "terraform.plan")
-    planCmd.Stdout = os.Stdout
-    planCmd.Stderr = os.Stderr
-    if err := planCmd.Run(); err != nil {
-        panic(err)
-    }
-
-    // Apply with JSON output
-    applyCmd := exec.Command("terraform", "apply", "-json", "terraform.plan")
-    applyOutput, err := applyCmd.StdoutPipe()
-    if err != nil {
-        panic(err)
-    }
-    applyCmd.Stderr = os.Stderr
-
-    // Start the apply command
-    if err := applyCmd.Start(); err != nil {
-        panic(err)
-    }
-
-    // Get the progress output as a string
-    output, err := progress.GetProgressOutput(applyOutput)
-    if err != nil {
-        panic(err)
-    }
-
-    // Stream the output to LEMC's UI
-    // Each line of the progress bar output is wrapped with LEMC's UI streaming verbs
-    lines := strings.Split(output, "\n")
-    for _, line := range lines {
-        if line != "" {
-            // Send the line to LEMC's UI buffer with trunc
-            fmt.Printf("lemc.html.buffer; %s\n", strings.TrimSpace(line))
-            fmt.Println("lemc.html.trunc;")
-        }
-    }
-
-    // Wait for the apply command to complete
-    if err := applyCmd.Wait(); err != nil {
-        panic(err)
-    }
-}
-```
-
-This example:
-1. Initializes Terraform and creates a plan
-2. Runs the apply command with JSON output
-3. Gets the progress bar output as a string
-4. Streams each line of the progress bar to LEMC's UI using the `lemc.html.buffer` and `lemc.html.trunc` verbs
-5. The progress bar will be displayed in real-time in the LEMC web interface
-
-The output will be streamed to the browser with a nice progress bar showing the status of your Terraform operations. Using `trunc` ensures that each line replaces the previous one, creating a smooth progress bar animation.
 
 ## Development
 
