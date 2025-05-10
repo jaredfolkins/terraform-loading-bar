@@ -690,3 +690,137 @@ type errorReader struct {
 func (r *errorReader) Read(p []byte) (int, error) {
 	return 0, r.err
 }
+
+func TestProgressBarTransitions(t *testing.T) {
+	// Create a reader with the mock Terraform output
+	reader := strings.NewReader(mockTerraformOutput)
+	handler := progress.NewProgressHandler(reader)
+
+	// Track the lines we receive
+	var lines []string
+	var planningLines []string
+	var applyLines []string
+
+	// Read all lines
+	for {
+		line, err := handler.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Errorf("Unexpected error: %v", err)
+			return
+		}
+		if line != "" {
+			lines = append(lines, line)
+
+			// Track planning vs apply phase lines
+			if strings.Contains(line, "[      PLANNING      ]") {
+				planningLines = append(planningLines, line)
+			} else if strings.Contains(line, "[=") {
+				applyLines = append(applyLines, line)
+			}
+		}
+	}
+
+	// Verify we got some output
+	if len(lines) == 0 {
+		t.Error("Expected non-empty output")
+		return
+	}
+
+	// Test 1: Verify we transition from planning to apply phase
+	if len(applyLines) == 0 {
+		t.Error("Progress bar never transitioned from PLANNING to showing actual progress")
+	}
+
+	// Test 2: Verify we don't get stuck in planning
+	if len(planningLines) > 20 { // Arbitrary threshold, adjust if needed
+		t.Errorf("Progress bar appears to be stuck in planning phase. Got %d planning lines", len(planningLines))
+	}
+
+	// Test 3: Verify the transition happens at the right time
+	foundApplyStart := false
+	for i, line := range lines {
+		if strings.Contains(line, "Creating...") {
+			foundApplyStart = true
+		}
+		if foundApplyStart && strings.Contains(line, "[      PLANNING      ]") {
+			t.Errorf("Found PLANNING after apply started at line %d: %s", i, line)
+		}
+	}
+
+	// Test 4: Verify progress increases after transition
+	var lastProgress int = -1
+	for _, line := range applyLines {
+		if strings.Contains(line, "[=") {
+			// Extract current step from line like "(1)[=...](18)"
+			parts := strings.Split(line, "[")
+			if len(parts) > 0 {
+				stepStr := strings.Trim(parts[0], "()")
+				if step, err := strconv.Atoi(stepStr); err == nil {
+					if lastProgress != -1 && step < lastProgress {
+						t.Errorf("Progress decreased from %d to %d", lastProgress, step)
+					}
+					lastProgress = step
+				}
+			}
+		}
+	}
+}
+
+func TestProgressBarPhaseDetection(t *testing.T) {
+	// Create a reader with the mock Terraform output
+	reader := strings.NewReader(mockTerraformOutput)
+	handler := progress.NewProgressHandler(reader)
+
+	// Track the phases we see
+	var phases []string
+	var currentPhase string = "initial"
+
+	// Read all lines
+	for {
+		line, err := handler.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Errorf("Unexpected error: %v", err)
+			return
+		}
+		if line != "" {
+			// Detect phase changes
+			if strings.Contains(line, "[      PLANNING      ]") {
+				if currentPhase != "planning" {
+					currentPhase = "planning"
+					phases = append(phases, currentPhase)
+				}
+			} else if strings.Contains(line, "[=") && !strings.Contains(line, "PLANNING") {
+				if currentPhase != "apply" {
+					currentPhase = "apply"
+					phases = append(phases, currentPhase)
+				}
+			}
+		}
+	}
+
+	// Verify we saw both phases
+	if len(phases) < 2 {
+		t.Errorf("Expected at least 2 phases (planning and apply), got %d: %v", len(phases), phases)
+	}
+
+	// Verify the correct order of phases
+	if phases[0] != "planning" {
+		t.Errorf("Expected first phase to be 'planning', got '%s'", phases[0])
+	}
+	if phases[1] != "apply" {
+		t.Errorf("Expected second phase to be 'apply', got '%s'", phases[1])
+	}
+
+	// Verify we don't go back to planning after apply starts
+	for i := 2; i < len(phases); i++ {
+		if phases[i] == "planning" {
+			t.Errorf("Found planning phase after apply started at index %d", i)
+		}
+	}
+}

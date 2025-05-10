@@ -153,7 +153,9 @@ func (ph *ProgressHandler) process() {
 			continue
 		}
 
+		// Set isPlanning to false when we see the first apply_start
 		if entry.Type == "apply_start" {
+			ph.isPlanning = false
 			if ph.currentStep < ph.totalSteps {
 				ph.currentStep++
 			}
