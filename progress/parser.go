@@ -473,7 +473,7 @@ func getProgressString(current, total, width int, message string, isPlanning boo
 		} else {
 			bar = strings.Repeat("=", filledWidth) + strings.Repeat(" ", barWidth-filledWidth)
 		}
-		output = fmt.Sprintf("(%d)[%s](%d) %s", current, bar, total, message)
+		output = fmt.Sprintf("(%02d)[%s](%02d) %s", current, bar, total, message)
 	}
 
 	return output

@@ -2,6 +2,7 @@ package progress_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -163,6 +164,14 @@ var mockTerraformApplyOutputNoPlanSummary = `
 {"@level":"info","@message":"google_compute_global_forwarding_rule.http_forwarding_rule: Creation complete after 23s [id=projects/hon3y-356719/global/forwardingRules/lemc-abcdef01-testuser-42-ind-http-fwd-rule]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:53.045954Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/forwardingRules/lemc-abcdef01-testuser-42-ind-http-fwd-rule","elapsed_seconds":23},"type":"apply_complete"}
 {"@level":"info","@message":"Apply complete! Resources: 18 added, 0 changed, 0 destroyed.","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:53.060601Z","changes":{"add":18,"change":0,"import":0,"remove":0,"operation":"apply"},"type":"change_summary"}
 {"@level":"info","@message":"Outputs: 8","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:53.060662Z","outputs":{"dns_name":{"sensitive":false,"type":"string","value":"lemc-abcdef01-testuser-42-ind.w-a-s-d.com"},"instance_name":{"sensitive":false,"type":"string","value":"lemc-abcdef01-testuser-42-ind"},"load_balancer_ip":{"sensitive":false,"type":"string","value":"34.54.77.204"},"private_ssh_key":{"sensitive":true,"type":"string"},"public_ip":{"sensitive":false,"type":"string","value":"34.122.141.130"},"public_ssh_key":{"sensitive":false,"type":"string","value":"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC0Lz2VxLSGpa4MROY0EkPpQS5IRx7frqvZolQYSH0hEF8Nc3mKWl37y/VCJabPlxr3/tmGg+yKAr7fdG0P75n9E0vRrm5R7SKfxN7LCAcLGZJM++OHYFoQ43aO2yeui3NVlxCwC0i1JNgZMrIl17uG9tLul/Om0luIf7oBh9t4sxrHvX4j2Vj3a68rnNwlSBuZ02GldOwKVlDYF2rJU02ndR+B+n3wgw0geaTtgYWLE2dFOu3hAwB5n+DQy+WXlcz+3OpCfzguEHPtirI9p9aC+BFNdknpVqj/KR2FMFSt7xAtZ5JFyv0QO0BWdx0mOBeouiKWG+853l/6fRCJpNYLr+iCg7rmB0Jf4oFvgyW1C+WuZJEFIybO9tjWty0hqAiyMTz4ld1xXP6M1JpwaKztu7nLCIHpCW/dqDuAH2yiqod9/eLcU8rc6uQQ6b1tFuUdMQeiU9HlxtwV/RRahi562glishNkrZoaagZL+htB503SaB4LZqKZc6y/8e8kErIJF/0Wkt9PI9uWzT1BNfEI4+/Y1UWYMAevDYHcEOG0SfVVHb/uO1JMzJjvziwhyr6vYx1zNfEsqVx9qIia1a7I/8YJGxfFnROlx7uEaDRRXprCc1twhj0vEJfwi6/EPjzjlsQdUAPAfzoUA9ZaQ0K4GRhoCTFHI7fz//RbPVDlbw==\\n"},"subnet_name":{"sensitive":false,"type":"string","value":"lemc-abcdef01-testuser-42-ind-subnet"},"vpc_name":{"sensitive":false,"type":"string","value":"lemc-abcdef01-testuser-42-ind-vpc"}},"type":"outputs"}
+`
+
+var mockTerraformSingleDigitOutput = `
+{"@level":"info","@message":"Terraform 1.8.0","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:47.831898Z","terraform":"1.8.0","type":"version","ui":"1.2"}
+{"@level":"info","@message":"Plan: 1 to add, 0 to change, 0 to destroy.","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242882Z","changes":{"add":1,"change":0,"import":0,"remove":0,"operation":"plan"},"type":"change_summary"}
+{"@level":"info","@message":"mock_resource.example: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:55.664347Z","hook":{"resource":{"addr":"mock_resource.example","module":"","resource":"mock_resource.example","implied_provider":"mock","resource_type":"mock_resource","resource_name":"example","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"mock_resource.example: Creation complete after 0s [id=mock_id]","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:56.417889Z","hook":{"resource":{"addr":"mock_resource.example","module":"","resource":"mock_resource.example","implied_provider":"mock","resource_type":"mock_resource","resource_name":"example","resource_key":null},"action":"create","id_key":"id","id_value":"mock_id","elapsed_seconds":0},"type":"apply_complete"}
+{"@level":"info","@message":"Apply complete! Resources: 1 added, 0 changed, 0 destroyed.","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:11.613225Z","changes":{"add":1,"change":0,"import":0,"remove":0,"operation":"apply"},"type":"change_summary"}
 `
 
 func TestProcessJSONStream(t *testing.T) {
@@ -345,8 +354,8 @@ done:
 	// Verify apply phase line now shows a proper progress bar, not the static one.
 	// Total steps should be 18 resources * 2 = 36.
 	// The first apply step will be (1)[=...](36)
-	expectedApplyBarPattern := "(1)[=" // Check for the start of a correct progress bar
-	expectedTotalInBar := "(36)"       // Check that the total is correctly identified
+	expectedApplyBarPattern := "(01)[=" // Check for the start of a correct progress bar
+	expectedTotalInBar := "(36)"        // Check that the total is correctly identified
 
 	if applyPhaseLine == "" {
 		t.Error("Did not capture an apply phase line (e.g., 'Creating...')")
@@ -501,5 +510,130 @@ done:
 	}
 	if !foundProgressBar {
 		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+func TestGetProgressString_SingleDigitPadding(t *testing.T) {
+	reader := strings.NewReader(mockTerraformSingleDigitOutput)
+	handler := progress.NewProgressHandler(reader)
+
+	var lines []string
+	var err error
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Read initial planning line
+	initialLine, readErr := handler.ReadLine()
+	if readErr != nil {
+		t.Fatalf("Failed to read initial line: %v", readErr)
+	}
+	lines = append(lines, initialLine)
+	if !strings.Contains(initialLine, "[      PLANNING      ] Planning...") {
+		t.Errorf("Expected initial line to be planning, got: %s", initialLine)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			err = fmt.Errorf("test timed out: %w", ctx.Err())
+			goto done
+		default:
+			line, readErr := handler.ReadLine()
+			if readErr != nil {
+				if readErr == io.EOF {
+					goto done
+				}
+				err = readErr
+				goto done
+			}
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+	}
+
+done:
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+		return
+	}
+
+	if len(lines) < 4 { // Initial, Plan Summary, Creating, Complete, Apply Summary
+		t.Fatalf("Expected at least 4 lines of output, got %d. Output:\\n%s", len(lines), strings.Join(lines, "\\n"))
+	}
+
+	// Example: Plan summary message should show (02) for total
+	// (00)[PLANNING](02) Plan: 1 to add...
+	planSummaryLine := ""
+	for _, l := range lines {
+		if strings.Contains(l, "Plan: 1 to add") {
+			planSummaryLine = l
+			break
+		}
+	}
+	if planSummaryLine == "" {
+		t.Fatal("Could not find 'Plan: 1 to add' line in output")
+	}
+	expectedPlanSummaryPattern := "(00)[  ](02) Plan: 1 to add"
+	if !strings.HasPrefix(planSummaryLine, expectedPlanSummaryPattern) {
+		t.Errorf("Expected plan summary line to start with '%s', got '%s'", expectedPlanSummaryPattern, planSummaryLine)
+	}
+
+	// Example: Creating message (current=1, total=2)
+	// (01)[=         ](02) mock_resource.example: Creating...
+	creatingLine := ""
+	for _, l := range lines {
+		if strings.Contains(l, "mock_resource.example: Creating...") {
+			creatingLine = l
+			break
+		}
+	}
+	if creatingLine == "" {
+		t.Fatal("Could not find 'mock_resource.example: Creating...' line in output")
+	}
+	// Bar width will be totalSteps (2 in this case)
+	// (01)[= ](02) mock_resource.example: Creating...
+	expectedCreatingPattern := "(01)[= ](02) mock_resource.example: Creating..."
+	if !strings.HasPrefix(creatingLine, expectedCreatingPattern) {
+		t.Errorf("Expected creating line to start with '%s', got '%s'", expectedCreatingPattern, creatingLine)
+	}
+
+	// Example: Creation complete message (current=2, total=2)
+	// (02)[==](02) mock_resource.example: Creation complete...
+	completeLine := ""
+	for _, l := range lines {
+		if strings.Contains(l, "mock_resource.example: Creation complete") {
+			completeLine = l
+			break
+		}
+	}
+	if completeLine == "" {
+		t.Fatal("Could not find 'mock_resource.example: Creation complete' line in output")
+	}
+	expectedCompletePattern := "(02)[==](02) mock_resource.example: Creation complete"
+	if !strings.HasPrefix(completeLine, expectedCompletePattern) {
+		t.Errorf("Expected complete line to start with '%s', got '%s'", expectedCompletePattern, completeLine)
+	}
+
+	// Example: Apply complete message
+	// (02)[==](02) Apply complete! Resources: 1 added
+	applySummaryLine := ""
+	for _, l := range lines {
+		if strings.Contains(l, "Apply complete! Resources: 1 added") {
+			applySummaryLine = l
+			break
+		}
+	}
+	if applySummaryLine == "" {
+		t.Fatal("Could not find 'Apply complete! Resources: 1 added' line in output")
+	}
+	expectedApplySummaryPattern := "(02)[==](02) Apply complete! Resources: 1 added"
+	if !strings.HasPrefix(applySummaryLine, expectedApplySummaryPattern) {
+		t.Errorf("Expected apply summary line to start with '%s', got '%s'", expectedApplySummaryPattern, applySummaryLine)
+	}
+
+	if t.Failed() {
+		t.Logf("Full output for TestGetProgressString_SingleDigitPadding:\\n%s", strings.Join(lines, "\\n"))
 	}
 }
