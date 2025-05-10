@@ -189,6 +189,8 @@ func (ph *ProgressHandler) process() {
 			// Instead of jumping to total, increment until we reach it
 			for ph.currentStep < ph.totalSteps {
 				ph.currentStep++
+				// Show "Finalizing..." message during completion
+				ph.lastFullMessage = "Finalizing..."
 				ph.lineChan <- getProgressString(ph.currentStep, ph.totalSteps, ph.progressBarWidth, ph.lastFullMessage, ph.isPlanning)
 				// Add a small delay to make the progress visible
 				time.Sleep(50 * time.Millisecond)
@@ -347,6 +349,8 @@ func GetProgressOutput(reader io.Reader) (string, error) {
 			// Instead of jumping to total, increment until we reach it
 			for currentStep < totalSteps {
 				currentStep++
+				// Show "Finalizing..." message during completion
+				lastFullMessage = "Finalizing..."
 				output.WriteString(getProgressString(currentStep, totalSteps, progressBarWidth, lastFullMessage, isPlanning))
 				output.WriteString("\n")
 				// Add a small delay to make the progress visible
