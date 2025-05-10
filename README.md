@@ -11,10 +11,11 @@ A Go tool that provides a visual progress bar for Terraform operations by parsin
 - Error highlighting and display
 - Clean, formatted output
 - JSON stream parsing for accurate progress tracking
+- Seamless integration with Let'em Cook! (LEMC) for browser-based progress display
 
-### Using with Let'em Cook! (LEMC)
+## Using with Let'em Cook! (LEMC)
 
-You can integrate the progress bar with [Let'em Cook! (LEMC)](https://github.com/jaredfolkins/letemcook) to stream the UI to the browser. Here's an example that shows how to use the ProgressHandler to stream the progress bar output with LEMC's UI streaming verbs:
+The progress bar can be integrated with [Let'em Cook! (LEMC)](https://github.com/jaredfolkins/letemcook) to stream the UI to the browser. Here's how to use the ProgressHandler with LEMC:
 
 ```go
 package main
@@ -71,6 +72,7 @@ func main() {
         }
 
         if line != "" {
+            // Use LEMC's trunc verb to update the progress bar in place
             fmt.Printf("lemc.html.trunc; %s\n", strings.TrimSpace(line))
         }
     }
@@ -82,14 +84,33 @@ func main() {
 }
 ```
 
-This example:
-1. Initializes Terraform and creates a plan
-2. Runs the apply command with JSON output
-3. Creates a ProgressHandler to process the JSON output stream
-4. Streams each line of the progress bar to LEMC's UI using the `lemc.html.trunc` verb
-5. The progress bar will be displayed in real-time in the LEMC web interface
+### How It Works with LEMC
 
-The output will be streamed to the browser with a nice progress bar showing the status of your Terraform operations. Using `trunc` ensures that each line replaces the previous one, creating a smooth progress bar animation.
+1. The `ProgressHandler` processes Terraform's JSON output stream in real-time
+2. Each line of progress is formatted with a visual progress bar
+3. Using LEMC's `lemc.html.trunc` verb, each line replaces the previous one in the browser
+4. This creates a smooth, animated progress bar showing:
+   - Current operation number and total operations
+   - Visual progress bar
+   - Resource name and current operation
+   - Error messages when they occur
+
+### Progress Bar Format
+
+The progress bar displays in the following format:
+```
+(current_step)[====================](total_steps) resource_name: operation...
+```
+
+For example:
+```
+(1)[====================](18) google_compute_network.vpc: Creating...
+```
+
+During the planning phase, it shows:
+```
+[     PLANNING     ] Planning...
+```
 
 ## Installation
 
@@ -98,8 +119,6 @@ go install github.com/jaredfolkins/terraform-loading-bar@latest
 ```
 
 ## Usage
-
-The tool reads Terraform's JSON output stream and displays a progress bar showing the status of resource creation, modification, or deletion.
 
 ### Basic Workflow
 
@@ -233,39 +252,7 @@ func main() {
 }
 ```
 
-This example shows how to:
-1. Initialize Terraform
-2. Create a plan
-3. Apply the plan with JSON output
-4. Get the progress output as a string and print it yourself
-
-The progress bar will show real-time updates as resources are created, modified, or deleted.
-
-### Output Format
-
-The tool displays progress in the following format:
-```
-(current_step)[====================](total_steps) resource_name: operation...
-```
-
-For example:
-```
-(1)[====================](18) google_compute_network.vpc: Creating...
-```
-
-Where:
-- `current_step`: Current operation number
-- `====================`: Visual progress bar
-- `total_steps`: Total number of operations
-- `resource_name`: Name of the resource being operated on
-- `operation`: Current operation (Creating, Modifying, Deleting, etc.)
-
-During the planning phase, the tool displays:
-```
-[     PLANNING     ] Planning...
-```
-
-### Error Handling
+## Error Handling
 
 The tool will display any Terraform errors in a clear format:
 ```
