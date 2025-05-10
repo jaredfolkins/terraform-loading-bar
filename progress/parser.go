@@ -80,6 +80,12 @@ type ProgressHandler struct {
 	resourceMessages map[string]string
 	lineChan         chan string
 	errChan          chan error
+	originalOutput   []string // Buffer to store original JSON lines
+}
+
+// GetOriginalOutput returns the buffered original JSON output
+func (ph *ProgressHandler) GetOriginalOutput() []string {
+	return ph.originalOutput
 }
 
 // NewProgressHandler creates a new ProgressHandler for the given reader
@@ -95,6 +101,7 @@ func NewProgressHandler(reader io.Reader) *ProgressHandler {
 		resourceMessages: make(map[string]string),
 		lineChan:         make(chan string),
 		errChan:          make(chan error),
+		originalOutput:   make([]string, 0),
 	}
 
 	// Start processing in a goroutine
@@ -129,6 +136,9 @@ func (ph *ProgressHandler) process() {
 
 	for ph.scanner.Scan() {
 		line := ph.scanner.Text()
+		// Store the original line in the buffer
+		ph.originalOutput = append(ph.originalOutput, line)
+
 		var entry TerraformLogEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue

@@ -945,3 +945,81 @@ func TestProgressBarPhaseDetection(t *testing.T) {
 		}
 	}
 }
+
+func TestOriginalOutputBuffer(t *testing.T) {
+	// Create a reader with the mock Terraform output
+	reader := strings.NewReader(mockTerraformOutput)
+
+	// Create a progress handler
+	handler := progress.NewProgressHandler(reader)
+
+	// Read all lines to process the output
+	for {
+		_, err := handler.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Errorf("Unexpected error: %v", err)
+			return
+		}
+	}
+
+	// Get the original output buffer
+	originalOutput := handler.GetOriginalOutput()
+
+	// Split the mock output into lines for comparison
+	mockLines := strings.Split(strings.TrimSpace(mockTerraformOutput), "\n")
+
+	// Remove leading empty lines from both slices
+	originalOutput = trimLeadingEmptyLines(originalOutput)
+	mockLines = trimLeadingEmptyLines(mockLines)
+
+	// Print lengths for debugging
+	t.Logf("Original output length: %d", len(originalOutput))
+	t.Logf("Mock data length: %d", len(mockLines))
+
+	// Print first few lines of both for comparison
+	t.Log("First 5 lines of original output:")
+	for i := 0; i < min(5, len(originalOutput)); i++ {
+		t.Logf("  %d: %s", i, originalOutput[i])
+	}
+	t.Log("First 5 lines of mock data:")
+	for i := 0; i < min(5, len(mockLines)); i++ {
+		t.Logf("  %d: %s", i, mockLines[i])
+	}
+
+	// Verify the lengths match
+	if len(originalOutput) != len(mockLines) {
+		t.Errorf("Original output length (%d) does not match mock data length (%d)",
+			len(originalOutput), len(mockLines))
+		return
+	}
+
+	// Compare each line
+	for i, line := range originalOutput {
+		if i >= len(mockLines) {
+			t.Errorf("Original output has more lines than mock data at index %d", i)
+			return
+		}
+		if line != mockLines[i] {
+			t.Errorf("Line %d mismatch:\nOriginal: %s\nMock:     %s", i, line, mockLines[i])
+		}
+	}
+}
+
+// Helper function to get minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// Helper function to trim leading empty lines from a slice of strings
+func trimLeadingEmptyLines(lines []string) []string {
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	return lines
+}
