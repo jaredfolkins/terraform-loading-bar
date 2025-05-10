@@ -77,6 +77,16 @@ var mockTerraformOutput = `
 {"@level":"info","@message":"Outputs: 8","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:53.060662Z","outputs":{"dns_name":{"sensitive":false,"type":"string","value":"example-instance.example.com"},"instance_name":{"sensitive":false,"type":"string","value":"example-instance"},"load_balancer_ip":{"sensitive":false,"type":"string","value":"10.0.0.1"},"private_ssh_key":{"sensitive":true,"type":"string"},"public_ip":{"sensitive":false,"type":"string","value":"10.0.0.2"},"public_ssh_key":{"sensitive":false,"type":"string","value":"ssh-rsa EXAMPLE_KEY"},"subnet_name":{"sensitive":false,"type":"string","value":"example-instance-subnet"},"vpc_name":{"sensitive":false,"type":"string","value":"example-instance-vpc"}},"type":"outputs"}
 `
 
+var mockTerraformDestroyOutput = `
+{"@level":"info","@message":"Terraform 1.11.4","@module":"terraform.ui","@timestamp":"2025-05-10T10:00:57.945980-07:00","terraform":"1.11.4","type":"version","ui":"1.2"}
+{"@level":"info","@message":"tls_private_key.ssh: Refreshing state... [id=abcdef1234567890abcdef1234567890abcdef12]","@module":"terraform.ui","@timestamp":"2025-05-10T10:01:00.215590-07:00","hook":{"resource":{"addr":"tls_private_key.ssh","module":"","resource":"tls_private_key.ssh","implied_provider":"tls","resource_type":"tls_private_key","resource_name":"ssh","resource_key":null},"id_key":"id","id_value":"abcdef1234567890abcdef1234567890abcdef12"},"type":"refresh_start"}
+{"@level":"info","@message":"tls_private_key.ssh: Refresh complete [id=abcdef1234567890abcdef1234567890abcdef12]","@module":"terraform.ui","@timestamp":"2025-05-10T10:01:00.217654-07:00","hook":{"resource":{"addr":"tls_private_key.ssh","module":"","resource":"tls_private_key.ssh","implied_provider":"tls","resource_type":"tls_private_key","resource_name":"ssh","resource_key":null},"id_key":"id","id_value":"abcdef1234567890abcdef1234567890abcdef12"},"type":"refresh_complete"}
+{"@level":"info","@message":"Plan: 0 to add, 0 to change, 18 to destroy.","@module":"terraform.ui","@timestamp":"2025-05-10T10:01:04.960408-07:00","changes":{"add":0,"change":0,"import":0,"remove":18,"operation":"plan"},"type":"change_summary"}
+{"@level":"info","@message":"google_dns_record_set.dns_record: Destroying... [id=projects/example-project/managedZones/example.com/rrsets/example-instance.example.com./A]","@module":"terraform.ui","@timestamp":"2025-05-10T10:01:05.865228-07:00","hook":{"resource":{"addr":"google_dns_record_set.dns_record","module":"","resource":"google_dns_record_set.dns_record","implied_provider":"google","resource_type":"google_dns_record_set","resource_name":"dns_record","resource_key":null},"action":"delete","id_key":"id","id_value":"projects/example-project/managedZones/example.com/rrsets/example-instance.example.com./A"},"type":"apply_start"}
+{"@level":"info","@message":"google_dns_record_set.dns_record: Destruction complete after 2s","@module":"terraform.ui","@timestamp":"2025-05-10T10:01:08.422318-07:00","hook":{"resource":{"addr":"google_dns_record_set.dns_record","module":"","resource":"google_dns_record_set.dns_record","implied_provider":"google","resource_type":"google_dns_record_set","resource_name":"dns_record","resource_key":null},"action":"delete","elapsed_seconds":2},"type":"apply_complete"}
+{"@level":"info","@message":"Destroy complete! Resources: 18 destroyed.","@module":"terraform.ui","@timestamp":"2025-05-10T10:04:06.935983-07:00","changes":{"add":0,"change":0,"import":0,"remove":18,"operation":"destroy"},"type":"change_summary"}
+`
+
 func TestProcessJSONStream(t *testing.T) {
 	// Create a reader with the mock Terraform output
 	reader := strings.NewReader(mockTerraformOutput)
@@ -173,6 +183,117 @@ done:
 	}
 	if !foundApplyComplete {
 		t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, strings.Join(lines, "\n"))
+	}
+
+	// Check for progress bar structure (e.g., presence of '[=')
+	foundProgressBar := false
+	for _, line := range lines {
+		if strings.Contains(line, "[=") || strings.Contains(line, "[-/-]") {
+			foundProgressBar = true
+			break
+		}
+	}
+	if !foundProgressBar {
+		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+func TestProcessJSONStream_Destroy(t *testing.T) {
+	// Create a reader with the mock Terraform destroy output
+	reader := strings.NewReader(mockTerraformDestroyOutput)
+
+	// Create a progress handler
+	handler := progress.NewProgressHandler(reader)
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Read all lines with context
+	var lines []string
+	var err error
+
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("Test timed out after 5 seconds")
+		default:
+			line, readErr := handler.ReadLine()
+			if readErr != nil {
+				if readErr == io.EOF {
+					goto done
+				}
+				err = readErr
+				return
+			}
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+	}
+done:
+
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+		return
+	}
+
+	// Verify we got some output
+	if len(lines) == 0 {
+		t.Error("Expected non-empty output")
+		return
+	}
+
+	// Check for total steps
+	expectedTotalStepsStr := "(18)"
+	foundTotalSteps := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedTotalStepsStr) {
+			foundTotalSteps = true
+			break
+		}
+	}
+	if !foundTotalSteps {
+		t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, strings.Join(lines, "\n"))
+	}
+
+	// Check for a specific "Destroying..." message
+	expectedDestroyingMessage := "google_dns_record_set.dns_record: Destroying..."
+	foundDestroyingMessage := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedDestroyingMessage) {
+			foundDestroyingMessage = true
+			break
+		}
+	}
+	if !foundDestroyingMessage {
+		t.Errorf("Output does not contain expected destroying message '%s'. Output:\n%s", expectedDestroyingMessage, strings.Join(lines, "\n"))
+	}
+
+	// Check for a specific "Destruction complete..." message
+	expectedCompleteMessage := "Destruction..."
+	foundCompleteMessage := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedCompleteMessage) {
+			foundCompleteMessage = true
+			break
+		}
+	}
+	if !foundCompleteMessage {
+		t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, strings.Join(lines, "\n"))
+	}
+
+	// Check for the final "Destroy complete!" message
+	expectedDestroyComplete := "Destroy complete! Resources: 18 destroyed"
+	foundDestroyComplete := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedDestroyComplete) {
+			foundDestroyComplete = true
+			break
+		}
+	}
+	if !foundDestroyComplete {
+		t.Errorf("Output does not contain expected final destroy complete message '%s'. Output:\n%s", expectedDestroyComplete, strings.Join(lines, "\n"))
 	}
 
 	// Check for progress bar structure (e.g., presence of '[=')
