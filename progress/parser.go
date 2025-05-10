@@ -254,3 +254,193 @@ func printProgress(writer io.Writer, current, total, width int, message string, 
 	fmt.Fprint(writer, output)
 	return output
 }
+
+// GetProgressOutput reads Terraform JSON output from reader and returns the progress bar output as a string.
+// This function is similar to ProcessJSONStream but returns the output instead of printing it.
+func GetProgressOutput(reader io.Reader) (string, error) {
+	scanner := bufio.NewScanner(reader)
+	totalSteps := 0
+	currentStep := 0
+	progressBarWidth := 0            // Will be calculated based on total steps
+	isPlanning := true               // Track if we're in planning phase
+	lastFullMessage := "Planning..." // Set initial message
+	var output strings.Builder
+
+	// First pass to estimate total steps from the plan summary or count resources
+	var lines []string
+	seeker, isSeeker := reader.(io.Seeker)
+	if isSeeker {
+		initialPos, _ := seeker.Seek(0, io.SeekCurrent)
+		scannerForCount := bufio.NewScanner(reader)
+		for scannerForCount.Scan() {
+			line := scannerForCount.Text()
+			lines = append(lines, line)
+			var entry TerraformLogEntry
+			if err := json.Unmarshal([]byte(line), &entry); err == nil {
+				if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
+					totalSteps = entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
+					progressBarWidth = totalSteps // Set bar width equal to total steps
+					isPlanning = false            // We're done planning
+					break                         // Found the plan summary
+				}
+			}
+		}
+		seeker.Seek(initialPos, io.SeekStart) // Reset reader for the main processing pass
+		scanner = bufio.NewScanner(reader)    // Re-initialize scanner
+	}
+
+	// If totalSteps is still 0 after the first pass (or if it wasn't a seeker),
+	// we can try to count distinct resources from planned_change as a fallback.
+	if totalSteps == 0 && len(lines) > 0 {
+		plannedResources := make(map[string]bool)
+		for _, line := range lines {
+			var entry TerraformLogEntry
+			if err := json.Unmarshal([]byte(line), &entry); err == nil {
+				if entry.Type == "planned_change" && entry.Change != nil && entry.Change.Resource.Addr != "" {
+					plannedResources[entry.Change.Resource.Addr] = true
+				} else if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
+					totalSteps = entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
+					progressBarWidth = totalSteps // Set bar width equal to total steps
+					isPlanning = false            // We're done planning
+					break
+				}
+			}
+		}
+		if totalSteps == 0 {
+			totalSteps = len(plannedResources)
+			progressBarWidth = totalSteps // Set bar width equal to total steps
+		}
+		scanner = bufio.NewScanner(strings.NewReader(strings.Join(lines, "\n")))
+	}
+
+	// Get initial progress bar
+	output.WriteString(getProgressString(currentStep, totalSteps, progressBarWidth, lastFullMessage, isPlanning))
+	output.WriteString("\n")
+
+	resourceMessages := make(map[string]string)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		var entry TerraformLogEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		msg := entry.Message
+		currentResourceAddr := ""
+
+		if entry.Hook != nil && entry.Hook.Resource.Addr != "" {
+			currentResourceAddr = entry.Hook.Resource.Addr
+		}
+
+		// Update totalSteps if a plan summary appears mid-stream
+		if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "plan" {
+			newTotal := entry.Changes.Add + entry.Changes.Change + entry.Changes.Remove
+			if totalSteps == 0 || newTotal > totalSteps {
+				totalSteps = newTotal
+				progressBarWidth = totalSteps // Update bar width when total steps changes
+			}
+			isPlanning = false // We're done planning
+			lastFullMessage = msg
+			output.WriteString(getProgressString(currentStep, totalSteps, progressBarWidth, lastFullMessage, isPlanning))
+			output.WriteString("\n")
+			continue
+		}
+
+		if entry.Type == "apply_start" {
+			if currentStep < totalSteps {
+				currentStep++
+			}
+			if currentResourceAddr != "" {
+				resourceMessages[currentResourceAddr] = msg
+				lastFullMessage = msg
+			} else {
+				lastFullMessage = msg
+			}
+		} else if entry.Type == "apply_complete" {
+			if currentResourceAddr != "" {
+				resourceMessages[currentResourceAddr] = msg
+				lastFullMessage = msg
+			} else {
+				lastFullMessage = msg
+			}
+		} else if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "apply" {
+			if currentStep < totalSteps {
+				currentStep = totalSteps
+			}
+			lastFullMessage = msg
+		} else if entry.Type == "outputs" {
+			lastFullMessage = "Processing outputs..."
+		} else if msg != "" && entry.Level == "error" {
+			output.WriteString(fmt.Sprintf("TERRAFORM ERROR: %s\n", msg))
+			lastFullMessage = msg
+		} else if msg != "" {
+			lastFullMessage = msg
+		}
+
+		output.WriteString(getProgressString(currentStep, totalSteps, progressBarWidth, lastFullMessage, isPlanning))
+		output.WriteString("\n")
+
+		if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "apply" {
+			output.WriteString("\n")
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading input: %w", err)
+	}
+
+	return output.String(), nil
+}
+
+// getProgressString returns the progress bar string without printing it
+func getProgressString(current, total, width int, message string, isPlanning bool) string {
+	// Sanitize message
+	message = strings.ReplaceAll(message, "\n", " ")
+	message = strings.ReplaceAll(message, "\r", " ")
+	message = strings.TrimSpace(message)
+
+	// Trim message to 48 chars with 3 dots
+	maxMsgLen := 48
+	if len(message) > maxMsgLen {
+		message = message[:maxMsgLen-3] + "..."
+	}
+
+	var output string
+	if total == 0 {
+		// During initial planning phase, show a fixed width bar
+		width = 20 // Use a reasonable default width when total is unknown
+		var bar string
+		if isPlanning {
+			planningText := "PLANNING"
+			spacesBefore := (width - len(planningText)) / 2
+			spacesAfter := width - len(planningText) - spacesBefore
+			bar = strings.Repeat(" ", spacesBefore) + planningText + strings.Repeat(" ", spacesAfter)
+		} else {
+			bar = strings.Repeat("-", width)
+		}
+		output = fmt.Sprintf("[%s] %s", bar, message)
+	} else {
+		percent := float64(current) / float64(total)
+		filledWidth := int(percent * float64(width))
+		if filledWidth < 0 {
+			filledWidth = 0
+		} else if filledWidth > width {
+			filledWidth = width
+		}
+
+		var bar string
+		if isPlanning {
+			// Center "PLANNING" in the bar
+			planningText := "PLANNING"
+			spacesBefore := (width - len(planningText)) / 2
+			spacesAfter := width - len(planningText) - spacesBefore
+			bar = strings.Repeat(" ", spacesBefore) + planningText + strings.Repeat(" ", spacesAfter)
+		} else {
+			bar = strings.Repeat("=", filledWidth) + strings.Repeat(" ", width-filledWidth)
+		}
+		output = fmt.Sprintf("(%d)[%s](%d) %s", current, bar, total, message)
+	}
+
+	return output
+}

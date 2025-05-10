@@ -2,6 +2,7 @@ package progress_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -210,4 +211,146 @@ func TestProcessJSONStream_Visual(t *testing.T) {
 	if err != nil {
 		t.Errorf("ProcessJSONStream returned an error: %v", err)
 	}
+}
+
+func TestGetProgressOutput(t *testing.T) {
+	// Create a reader with the mock Terraform output
+	reader := strings.NewReader(mockTerraformOutput)
+
+	// Get the progress output as a string
+	output, err := progress.GetProgressOutput(reader)
+	if err != nil {
+		t.Errorf("GetProgressOutput returned an error: %v", err)
+	}
+
+	// Split the output into lines for easier testing
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// --- Assertions ---
+
+	// Check for total steps
+	// From the log: "Plan: 18 to add, 0 to change, 0 to destroy."
+	expectedTotalStepsStr := "(18)"
+	foundTotalSteps := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedTotalStepsStr) {
+			foundTotalSteps = true
+			break
+		}
+	}
+	if !foundTotalSteps {
+		t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, output)
+	}
+
+	// Check for a specific "Creating..." message
+	expectedCreatingMessage := "tls_private_key.ssh: Creating..."
+	foundCreatingMessage := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedCreatingMessage) {
+			foundCreatingMessage = true
+			break
+		}
+	}
+	if !foundCreatingMessage {
+		t.Errorf("Output does not contain expected creating message '%s'. Output:\n%s", expectedCreatingMessage, output)
+	}
+
+	// Check for a specific "Creation complete..." message
+	expectedCompleteMessage := "Creation complete"
+	foundCompleteMessage := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedCompleteMessage) {
+			foundCompleteMessage = true
+			break
+		}
+	}
+	if !foundCompleteMessage {
+		t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, output)
+	}
+
+	// Check for the final "Apply complete!" message
+	expectedApplyComplete := "Apply complete! Resources: 18 added, 0 change..."
+	foundApplyComplete := false
+	for _, line := range lines {
+		if strings.Contains(line, expectedApplyComplete) {
+			foundApplyComplete = true
+			break
+		}
+	}
+	if !foundApplyComplete {
+		t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, output)
+	}
+
+	// Check for progress bar structure (e.g., presence of '[=')
+	foundProgressBar := false
+	for _, line := range lines {
+		if strings.Contains(line, "[=") || strings.Contains(line, "[-/-]") {
+			foundProgressBar = true
+			break
+		}
+	}
+	if !foundProgressBar {
+		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", output)
+	}
+
+	// Check that the output ends with a newline
+	if !strings.HasSuffix(output, "\n") {
+		t.Errorf("Output does not end with a newline. Output:\n%s", output)
+	}
+
+	// Check that the output contains multiple lines
+	if len(lines) < 2 {
+		t.Errorf("Expected multiple lines of output, got %d. Output:\n%s", len(lines), output)
+	}
+
+	// Check that the last line contains either "Outputs: 8" or "Processing outputs..."
+	lastLine := lines[len(lines)-1]
+	if !strings.Contains(lastLine, "Outputs: 8") && !strings.Contains(lastLine, "Processing outputs...") {
+		t.Errorf("Last line does not contain expected output message. Last line: %s", lastLine)
+	}
+}
+
+func TestGetProgressOutputWithPrint(t *testing.T) {
+	// Create a reader with the mock Terraform output
+	reader := strings.NewReader(mockTerraformOutput)
+
+	// Get the progress output as a string
+	output, err := progress.GetProgressOutput(reader)
+	if err != nil {
+		t.Errorf("GetProgressOutput returned an error: %v", err)
+	}
+
+	// Print the output with a header
+	fmt.Println("=== Terraform Progress Output ===")
+	fmt.Print(output)
+	fmt.Println("=== End of Progress Output ===")
+
+	// Verify the output is not empty
+	if len(output) == 0 {
+		t.Error("Output is empty")
+	}
+
+	// Verify the output contains expected content
+	expectedContent := []string{
+		"Planning...",
+		"Creating...",
+		"Creation complete",
+		"Apply complete",
+	}
+
+	for _, content := range expectedContent {
+		if !strings.Contains(output, content) {
+			t.Errorf("Output does not contain expected content: %s", content)
+		}
+	}
+
+	// Print the output line by line for detailed inspection
+	fmt.Println("\n=== Detailed Output Inspection ===")
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		if line != "" { // Skip empty lines
+			fmt.Printf("Line %d: %s\n", i+1, line)
+		}
+	}
+	fmt.Println("=== End of Detailed Inspection ===")
 }
