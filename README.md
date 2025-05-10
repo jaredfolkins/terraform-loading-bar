@@ -105,7 +105,7 @@ The progress bar displays in the following format:
 
 For example:
 ```
-(1)[====================](18) google_compute_network.vpc: Creating...
+(01)[====================](18) google_compute_network.vpc: Creating...
 ```
 
 During the planning phase, it shows:
