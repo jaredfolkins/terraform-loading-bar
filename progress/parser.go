@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 // TerraformLogEntry represents a generic log entry from Terraform JSON output.
@@ -185,8 +186,12 @@ func (ph *ProgressHandler) process() {
 				ph.lastFullMessage = msg
 			}
 		} else if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "apply" {
-			if ph.currentStep < ph.totalSteps {
-				ph.currentStep = ph.totalSteps
+			// Instead of jumping to total, increment until we reach it
+			for ph.currentStep < ph.totalSteps {
+				ph.currentStep++
+				ph.lineChan <- getProgressString(ph.currentStep, ph.totalSteps, ph.progressBarWidth, ph.lastFullMessage, ph.isPlanning)
+				// Add a small delay to make the progress visible
+				time.Sleep(50 * time.Millisecond)
 			}
 			ph.lastFullMessage = msg
 		} else if entry.Type == "outputs" {
@@ -339,8 +344,13 @@ func GetProgressOutput(reader io.Reader) (string, error) {
 				lastFullMessage = msg
 			}
 		} else if entry.Type == "change_summary" && entry.Changes != nil && entry.Changes.Operation == "apply" {
-			if currentStep < totalSteps {
-				currentStep = totalSteps
+			// Instead of jumping to total, increment until we reach it
+			for currentStep < totalSteps {
+				currentStep++
+				output.WriteString(getProgressString(currentStep, totalSteps, progressBarWidth, lastFullMessage, isPlanning))
+				output.WriteString("\n")
+				// Add a small delay to make the progress visible
+				time.Sleep(50 * time.Millisecond)
 			}
 			lastFullMessage = msg
 		} else if entry.Type == "outputs" {
