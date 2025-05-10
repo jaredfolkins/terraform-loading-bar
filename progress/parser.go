@@ -11,17 +11,18 @@ import (
 
 // TerraformLogEntry represents a generic log entry from Terraform JSON output.
 type TerraformLogEntry struct {
-	Level     string                 `json:"@level"`
-	Message   string                 `json:"@message"`
-	Module    string                 `json:"@module"`
-	Timestamp string                 `json:"@timestamp"`
-	Type      string                 `json:"type"`
-	Hook      *HookData              `json:"hook,omitempty"`
-	Change    *ChangeData            `json:"change,omitempty"`
-	Changes   *ChangesSummary        `json:"changes,omitempty"`
-	Outputs   map[string]OutputEntry `json:"outputs,omitempty"`   // To capture the final outputs block
-	Terraform string                 `json:"terraform,omitempty"` // For version info
-	UI        string                 `json:"ui,omitempty"`        // For version info
+	Level      string                 `json:"@level"`
+	Message    string                 `json:"@message"`
+	Module     string                 `json:"@module"`
+	Timestamp  string                 `json:"@timestamp"`
+	Type       string                 `json:"type"`
+	Hook       *HookData              `json:"hook,omitempty"`
+	Change     *ChangeData            `json:"change,omitempty"`
+	Changes    *ChangesSummary        `json:"changes,omitempty"`
+	Outputs    map[string]OutputEntry `json:"outputs,omitempty"`    // To capture the final outputs block
+	Terraform  string                 `json:"terraform,omitempty"`  // For version info
+	UI         string                 `json:"ui,omitempty"`         // For version info
+	Diagnostic *DiagnosticData        `json:"diagnostic,omitempty"` // For warnings and errors
 }
 
 // HookData contains information about the resource being acted upon.
@@ -66,6 +67,13 @@ type OutputEntry struct {
 	Type      interface{} `json:"type"` // Type can be a string or a more complex structure
 	Value     interface{} `json:"value,omitempty"`
 	Action    string      `json:"action,omitempty"` // For planned outputs
+}
+
+// DiagnosticData contains information about warnings and errors.
+type DiagnosticData struct {
+	Severity string `json:"severity"`
+	Summary  string `json:"summary"`
+	Detail   string `json:"detail"`
 }
 
 // ProgressHandler handles streaming progress for Terraform operations
@@ -141,6 +149,9 @@ func (ph *ProgressHandler) process() {
 
 		var entry TerraformLogEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			// Non-JSON lines might be progress updates from plugins, or other info.
+			// We can choose to send them through or log them for debugging.
+			// For now, let's assume they are not part of the progress bar data itself.
 			continue
 		}
 
@@ -167,7 +178,25 @@ func (ph *ProgressHandler) process() {
 
 		// Set isPlanning to false when we see the first apply_start
 		if entry.Type == "apply_start" {
-			ph.isPlanning = false
+			ph.isPlanning = false // Definitely not planning anymore
+
+			// If totalSteps is still 0, try to derive it from planned_change events in the buffer
+			if ph.totalSteps == 0 && len(ph.originalOutput) > 0 {
+				plannedResources := make(map[string]bool)
+				for _, bufferedLine := range ph.originalOutput {
+					var bufferedEntry TerraformLogEntry
+					if json.Unmarshal([]byte(bufferedLine), &bufferedEntry) == nil {
+						if bufferedEntry.Type == "planned_change" && bufferedEntry.Change != nil && bufferedEntry.Change.Resource.Addr != "" {
+							plannedResources[bufferedEntry.Change.Resource.Addr] = true
+						}
+					}
+				}
+				if len(plannedResources) > 0 {
+					ph.totalSteps = len(plannedResources) * 2
+					ph.progressBarWidth = ph.totalSteps
+				}
+			}
+
 			if ph.currentStep < ph.totalSteps {
 				ph.currentStep++
 			}

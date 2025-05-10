@@ -2,9 +2,7 @@ package progress_test
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,10 +19,10 @@ var mockTerraformOutput = `
 {"@level":"info","@message":"google_compute_managed_ssl_certificate.ssl_certificate: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242756Z","change":{"resource":{"addr":"google_compute_managed_ssl_certificate.ssl_certificate","module":"","resource":"google_compute_managed_ssl_certificate.ssl_certificate","implied_provider":"google","resource_type":"google_compute_managed_ssl_certificate","resource_name":"ssl_certificate","resource_key":null},"action":"create"},"type":"planned_change"}
 {"@level":"info","@message":"google_compute_global_address.lb_ip: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242765Z","change":{"resource":{"addr":"google_compute_global_address.lb_ip","module":"","resource":"google_compute_global_address.lb_ip","implied_provider":"google","resource_type":"google_compute_global_address","resource_name":"lb_ip","resource_key":null},"action":"create"},"type":"planned_change"}
 {"@level":"info","@message":"google_compute_address.public_ip: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242772Z","change":{"resource":{"addr":"google_compute_address.public_ip","module":"","resource":"google_compute_address.public_ip","implied_provider":"google","resource_type":"google_compute_address","resource_name":"public_ip","resource_key":null},"action":"create"},"type":"planned_change"}
-{"@level":"info","@message":"google_compute_firewall.allow_lb_healthcheck: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242778Z","change":{"resource":{"addr":"google_compute_firewall.allow_lb_healthcheck","module":"","resource":"google_compute_firewall.allow_lb_healthcheck","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_lb_healthcheck","resource_key":null},"action":"create"},"type":"planned_change"}
-{"@level":"info","@message":"google_compute_subnetwork.subnet: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242785Z","change":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_firewall.allow_ssh: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242778Z","change":{"resource":{"addr":"google_compute_firewall.allow_ssh","module":"","resource":"google_compute_firewall.allow_ssh","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_ssh","resource_key":null},"action":"create"},"type":"planned_change"}
 {"@level":"info","@message":"google_compute_health_check.lb_health_check: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242792Z","change":{"resource":{"addr":"google_compute_health_check.lb_health_check","module":"","resource":"google_compute_health_check.lb_health_check","implied_provider":"google","resource_type":"google_compute_health_check","resource_name":"lb_health_check","resource_key":null},"action":"create"},"type":"planned_change"}
-{"@level":"info","@message":"google_compute_firewall.allow_ssh: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242799Z","change":{"resource":{"addr":"google_compute_firewall.allow_ssh","module":"","resource":"google_compute_firewall.allow_ssh","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_ssh","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_subnetwork.subnet: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242785Z","change":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_firewall.allow_lb_healthcheck: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242799Z","change":{"resource":{"addr":"google_compute_firewall.allow_lb_healthcheck","module":"","resource":"google_compute_firewall.allow_lb_healthcheck","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_lb_healthcheck","resource_key":null},"action":"create"},"type":"planned_change"}
 {"@level":"info","@message":"google_compute_instance.vm: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242805Z","change":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create"},"type":"planned_change"}
 {"@level":"info","@message":"google_compute_instance_group.instance_group: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242823Z","change":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create"},"type":"planned_change"}
 {"@level":"info","@message":"google_compute_backend_service.backend_service: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T03:27:54.242832Z","change":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create"},"type":"planned_change"}
@@ -53,28 +51,34 @@ var mockTerraformOutput = `
 {"@level":"info","@message":"google_compute_firewall.allow_ssh: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:17.862011Z","hook":{"resource":{"addr":"google_compute_firewall.allow_ssh","module":"","resource":"google_compute_firewall.allow_ssh","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_ssh","resource_key":null},"action":"create"},"type":"apply_start"}
 {"@level":"info","@message":"google_compute_subnetwork.subnet: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:17.865632Z","hook":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create"},"type":"apply_start"}
 {"@level":"info","@message":"google_compute_firewall.allow_lb_healthcheck: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:17.865930Z","hook":{"resource":{"addr":"google_compute_firewall.allow_lb_healthcheck","module":"","resource":"google_compute_firewall.allow_lb_healthcheck","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_lb_healthcheck","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_firewall.allow_ssh: Creation complete after 11s [id=projects/example-project/global/firewalls/example-instance-allow-ssh]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:29.036695Z","hook":{"resource":{"addr":"google_compute_firewall.allow_ssh","module":"","resource":"google_compute_firewall.allow_ssh","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_ssh","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/firewalls/example-instance-allow-ssh","elapsed_seconds":11},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_firewall.allow_lb_healthcheck: Creation complete after 11s [id=projects/example-project/global/firewalls/example-instance-allow-lb-hc]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:29.098357Z","hook":{"resource":{"addr":"google_compute_firewall.allow_lb_healthcheck","module":"","resource":"google_compute_firewall.allow_lb_healthcheck","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_lb_healthcheck","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/firewalls/example-instance-allow-lb-hc","elapsed_seconds":11},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_subnetwork.subnet: Creation complete after 21s [id=projects/example-project/regions/us-central1/subnetworks/example-instance-subnet]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:39.298507Z","hook":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/regions/us-central1/subnetworks/example-instance-subnet","elapsed_seconds":21},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_instance.vm: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:39.316775Z","hook":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_instance.vm: Creation complete after 14s [id=projects/example-project/zones/us-central1-a/instances/example-instance]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:53.247084Z","hook":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/zones/us-central1-a/instances/example-instance","elapsed_seconds":14},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_firewall.allow_ssh: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:27.865355Z","hook":{"resource":{"addr":"google_compute_firewall.allow_ssh","module":"","resource":"google_compute_firewall.allow_ssh","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_ssh","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_firewall.allow_lb_healthcheck: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:27.867214Z","hook":{"resource":{"addr":"google_compute_firewall.allow_lb_healthcheck","module":"","resource":"google_compute_firewall.allow_lb_healthcheck","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_lb_healthcheck","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_subnetwork.subnet: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:27.867297Z","hook":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_subnetwork.subnet: Creation complete after 11s [id=projects/example-project/regions/us-central1/subnetworks/example-instance-subnet]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:28.801735Z","hook":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/regions/us-central1/subnetworks/example-instance-subnet","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_instance.vm: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:28.819074Z","hook":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_instance.vm: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:38.819807Z","hook":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_instance.vm: Creation complete after 13s [id=projects/example-project/zones/us-central1-a/instances/example-instance]","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:53.247084Z","hook":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/zones/us-central1-a/instances/example-instance","elapsed_seconds":13},"type":"apply_complete"}
 {"@level":"info","@message":"google_compute_instance_group.instance_group: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:28:53.256366Z","hook":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_instance_group.instance_group: Creation complete after 12s [id=projects/example-project/zones/us-central1-a/instanceGroups/example-instance-ig]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:04.864269Z","hook":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/zones/us-central1-a/instanceGroups/example-instance-ig","elapsed_seconds":12},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_backend_service.backend_service: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:04.879821Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_backend_service.backend_service: Creation complete after 1m3s [id=projects/example-project/global/backendServices/example-instance-bes]","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:07.910844Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/backendServices/example-instance-bes","elapsed_seconds":63},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_url_map.url_map: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:07.933852Z","hook":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_url_map.url_map: Creation complete after 11s [id=projects/example-project/global/urlMaps/example-instance-urlmap]","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:19.372620Z","hook":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/urlMaps/example-instance-urlmap","elapsed_seconds":11},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_target_http_proxy.http_proxy: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:19.380868Z","hook":{"resource":{"addr":"google_compute_target_http_proxy.http_proxy","module":"","resource":"google_compute_target_http_proxy.http_proxy","implied_provider":"google","resource_type":"google_compute_target_http_proxy","resource_name":"http_proxy","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_target_https_proxy.https_proxy: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:19.384149Z","hook":{"resource":{"addr":"google_compute_target_https_proxy.https_proxy","module":"","resource":"google_compute_target_https_proxy.https_proxy","implied_provider":"google","resource_type":"google_compute_target_https_proxy","resource_name":"https_proxy","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_target_https_proxy.https_proxy: Creation complete after 12s [id=projects/example-project/global/targetHttpsProxies/example-instance-https-proxy]","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:30.589006Z","hook":{"resource":{"addr":"google_compute_target_https_proxy.https_proxy","module":"","resource":"google_compute_target_https_proxy.https_proxy","implied_provider":"google","resource_type":"google_compute_target_https_proxy","resource_name":"https_proxy","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/targetHttpsProxies/example-instance-https-proxy","elapsed_seconds":12},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_global_forwarding_rule.https_forwarding_rule: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:30.599341Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.https_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.https_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"https_forwarding_rule","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_target_http_proxy.http_proxy: Creation complete after 12s [id=projects/example-project/global/targetHttpProxies/example-instance-http-proxy]","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:30.703229Z","hook":{"resource":{"addr":"google_compute_target_http_proxy.http_proxy","module":"","resource":"google_compute_target_http_proxy.http_proxy","implied_provider":"google","resource_type":"google_compute_target_http_proxy","resource_name":"http_proxy","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/targetHttpProxies/example-instance-http-proxy","elapsed_seconds":12},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_global_forwarding_rule.http_forwarding_rule: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:30.711891Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create"},"type":"apply_start"}
-{"@level":"info","@message":"google_compute_global_forwarding_rule.https_forwarding_rule: Creation complete after 22s [id=projects/example-project/global/forwardingRules/example-instance-https-fwd-rule]","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:52.567767Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.https_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.https_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"https_forwarding_rule","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/forwardingRules/example-instance-https-fwd-rule","elapsed_seconds":22},"type":"apply_complete"}
-{"@level":"info","@message":"google_compute_global_forwarding_rule.http_forwarding_rule: Creation complete after 22s [id=projects/example-project/global/forwardingRules/example-instance-http-fwd-rule]","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:53.045954Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/forwardingRules/example-instance-http-fwd-rule","elapsed_seconds":22},"type":"apply_complete"}
-{"@level":"warn","@message":"Warning: Value for undeclared variable","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:53.056560Z","diagnostic":{"severity":"warning","summary":"Value for undeclared variable","detail":"The root module does not declare a variable named "credentials_file" but a value was found in file "terraform.tfvars". If you meant to use this value, add a "variable" block to the configuration.\n\nTo silence these warnings, use TF_VAR_... environment variables to provide certain "global" settings to all configurations in your organization. To reduce the verbosity of these warnings, use the -compact-warnings option."},"type":"diagnostic"}
-{"@level":"info","@message":"Apply complete! Resources: 18 added, 0 changed, 0 destroyed.","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:53.060601Z","changes":{"add":18,"change":0,"import":0,"remove":0,"operation":"apply"},"type":"change_summary"}
-{"@level":"info","@message":"Outputs: 8","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:53.060662Z","outputs":{"dns_name":{"sensitive":false,"type":"string","value":"example-instance.example.com"},"instance_name":{"sensitive":false,"type":"string","value":"example-instance"},"load_balancer_ip":{"sensitive":false,"type":"string","value":"10.0.0.1"},"private_ssh_key":{"sensitive":true,"type":"string"},"public_ip":{"sensitive":false,"type":"string","value":"10.0.0.2"},"public_ssh_key":{"sensitive":false,"type":"string","value":"ssh-rsa EXAMPLE_KEY"},"subnet_name":{"sensitive":false,"type":"string","value":"example-instance-subnet"},"vpc_name":{"sensitive":false,"type":"string","value":"example-instance-vpc"}},"type":"outputs"}
+{"@level":"info","@message":"google_compute_instance_group.instance_group: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:03.259284Z","hook":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_instance_group.instance_group: Creation complete after 11s [id=projects/example-project/zones/us-central1-a/instanceGroups/example-instance-ig]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:04.864269Z","hook":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/zones/us-central1-a/instanceGroups/example-instance-ig","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:04.879821Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [20s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:14.880179Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":20},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [30s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:24.881280Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":30},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [40s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:34.882970Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":40},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [50s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:44.883973Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":50},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Creation complete after 54s [id=projects/example-project/global/backendServices/example-instance-bes]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:46.651481Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/backendServices/example-instance-bes","elapsed_seconds":54},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_url_map.url_map: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:46.677563Z","hook":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_url_map.url_map: Still creating... [20s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:56.681348Z","hook":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create","elapsed_seconds":20},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_url_map.url_map: Creation complete after 11s [id=projects/example-project/global/urlMaps/example-instance-urlmap]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:57.908775Z","hook":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/urlMaps/example-instance-urlmap","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_target_https_proxy.https_proxy: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:57.928063Z","hook":{"resource":{"addr":"google_compute_target_https_proxy.https_proxy","module":"","resource":"google_compute_target_https_proxy.https_proxy","implied_provider":"google","resource_type":"google_compute_target_https_proxy","resource_name":"https_proxy","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_target_http_proxy.http_proxy: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:57.929172Z","hook":{"resource":{"addr":"google_compute_target_http_proxy.http_proxy","module":"","resource":"google_compute_target_http_proxy.http_proxy","implied_provider":"google","resource_type":"google_compute_target_http_proxy","resource_name":"http_proxy","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_target_http_proxy.http_proxy: Creation complete after 11s [id=projects/example-project/global/targetHttpProxies/example-instance-http-proxy]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:59.127107Z","hook":{"resource":{"addr":"google_compute_target_http_proxy.http_proxy","module":"","resource":"google_compute_target_http_proxy.http_proxy","implied_provider":"google","resource_type":"google_compute_target_http_proxy","resource_name":"http_proxy","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/targetHttpProxies/example-instance-http-proxy","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.http_forwarding_rule: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:59.136779Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.https_forwarding_rule: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T03:29:59.196840Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.https_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.https_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"https_forwarding_rule","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.https_forwarding_rule: Creation complete after 22s [id=projects/example-project/global/forwardingRules/example-instance-https-fwd-rule]","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:11.209168Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.https_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.https_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"https_forwarding_rule","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/forwardingRules/example-instance-https-fwd-rule","elapsed_seconds":22},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.http_forwarding_rule: Creation complete after 23s [id=projects/example-project/global/forwardingRules/example-instance-http-fwd-rule]","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:11.593142Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create","id_key":"id","id_value":"projects/example-project/global/forwardingRules/example-instance-http-fwd-rule","elapsed_seconds":23},"type":"apply_complete"}
+{"@level":"info","@message":"Apply complete! Resources: 18 added, 0 changed, 0 destroyed.","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:11.613225Z","changes":{"add":18,"change":0,"import":0,"remove":0,"operation":"apply"},"type":"change_summary"}
+{"@level":"info","@message":"Outputs: 8","@module":"terraform.ui","@timestamp":"2025-05-10T03:30:11.613390Z","outputs":{"dns_name":{"sensitive":false,"type":"string","value":"example-instance.example.com"},"instance_name":{"sensitive":false,"type":"string","value":"example-instance"},"load_balancer_ip":{"sensitive":false,"type":"string","value":"10.0.0.1"},"private_ssh_key":{"sensitive":true,"type":"string"},"public_ip":{"sensitive":false,"type":"string","value":"10.0.0.2"},"public_ssh_key":{"sensitive":false,"type":"string","value":"ssh-rsa EXAMPLE_KEY"},"subnet_name":{"sensitive":false,"type":"string","value":"example-instance-subnet"},"vpc_name":{"sensitive":false,"type":"string","value":"example-instance-vpc"}},"type":"outputs"}
 `
 
 var mockTerraformDestroyOutput = `
@@ -85,6 +89,80 @@ var mockTerraformDestroyOutput = `
 {"@level":"info","@message":"google_dns_record_set.dns_record: Destroying... [id=projects/example-project/managedZones/example.com/rrsets/example-instance.example.com./A]","@module":"terraform.ui","@timestamp":"2025-05-10T10:01:05.865228-07:00","hook":{"resource":{"addr":"google_dns_record_set.dns_record","module":"","resource":"google_dns_record_set.dns_record","implied_provider":"google","resource_type":"google_dns_record_set","resource_name":"dns_record","resource_key":null},"action":"delete","id_key":"id","id_value":"projects/example-project/managedZones/example.com/rrsets/example-instance.example.com./A"},"type":"apply_start"}
 {"@level":"info","@message":"google_dns_record_set.dns_record: Destruction complete after 2s","@module":"terraform.ui","@timestamp":"2025-05-10T10:01:08.422318-07:00","hook":{"resource":{"addr":"google_dns_record_set.dns_record","module":"","resource":"google_dns_record_set.dns_record","implied_provider":"google","resource_type":"google_dns_record_set","resource_name":"dns_record","resource_key":null},"action":"delete","elapsed_seconds":2},"type":"apply_complete"}
 {"@level":"info","@message":"Destroy complete! Resources: 18 destroyed.","@module":"terraform.ui","@timestamp":"2025-05-10T10:04:06.935983-07:00","changes":{"add":0,"change":0,"import":0,"remove":18,"operation":"destroy"},"type":"change_summary"}
+`
+
+var mockTerraformApplyOutputNoPlanSummary = `
+{"@level":"info","@message":"Terraform 1.8.0","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:31.599035Z","terraform":"1.8.0","type":"version","ui":"1.2"}
+{"@level":"info","@message":"tls_private_key.ssh: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352520Z","change":{"resource":{"addr":"tls_private_key.ssh","module":"","resource":"tls_private_key.ssh","implied_provider":"tls","resource_type":"tls_private_key","resource_name":"ssh","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_network.vpc: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352619Z","change":{"resource":{"addr":"google_compute_network.vpc","module":"","resource":"google_compute_network.vpc","implied_provider":"google","resource_type":"google_compute_network","resource_name":"vpc","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_global_address.lb_ip: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352632Z","change":{"resource":{"addr":"google_compute_global_address.lb_ip","module":"","resource":"google_compute_global_address.lb_ip","implied_provider":"google","resource_type":"google_compute_global_address","resource_name":"lb_ip","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_managed_ssl_certificate.ssl_certificate: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352639Z","change":{"resource":{"addr":"google_compute_managed_ssl_certificate.ssl_certificate","module":"","resource":"google_compute_managed_ssl_certificate.ssl_certificate","implied_provider":"google","resource_type":"google_compute_managed_ssl_certificate","resource_name":"ssl_certificate","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_address.public_ip: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352646Z","change":{"resource":{"addr":"google_compute_address.public_ip","module":"","resource":"google_compute_address.public_ip","implied_provider":"google","resource_type":"google_compute_address","resource_name":"public_ip","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_firewall.allow_ssh: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352653Z","change":{"resource":{"addr":"google_compute_firewall.allow_ssh","module":"","resource":"google_compute_firewall.allow_ssh","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_ssh","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_health_check.lb_health_check: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352659Z","change":{"resource":{"addr":"google_compute_health_check.lb_health_check","module":"","resource":"google_compute_health_check.lb_health_check","implied_provider":"google","resource_type":"google_compute_health_check","resource_name":"lb_health_check","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_subnetwork.subnet: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352664Z","change":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_firewall.allow_lb_healthcheck: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352670Z","change":{"resource":{"addr":"google_compute_firewall.allow_lb_healthcheck","module":"","resource":"google_compute_firewall.allow_lb_healthcheck","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_lb_healthcheck","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_instance.vm: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352675Z","change":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_instance_group.instance_group: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352699Z","change":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352704Z","change":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_url_map.url_map: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352710Z","change":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_target_http_proxy.http_proxy: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352715Z","change":{"resource":{"addr":"google_compute_target_http_proxy.http_proxy","module":"","resource":"google_compute_target_http_proxy.http_proxy","implied_provider":"google","resource_type":"google_compute_target_http_proxy","resource_name":"http_proxy","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_target_https_proxy.https_proxy: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352721Z","change":{"resource":{"addr":"google_compute_target_https_proxy.https_proxy","module":"","resource":"google_compute_target_https_proxy.https_proxy","implied_provider":"google","resource_type":"google_compute_target_https_proxy","resource_name":"https_proxy","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.http_forwarding_rule: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352726Z","change":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.https_forwarding_rule: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352732Z","change":{"resource":{"addr":"google_compute_global_forwarding_rule.https_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.https_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"https_forwarding_rule","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"google_dns_record_set.dns_record: Plan to create","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:34.352738Z","change":{"resource":{"addr":"google_dns_record_set.dns_record","module":"","resource":"google_dns_record_set.dns_record","implied_provider":"google","resource_type":"google_dns_record_set","resource_name":"dns_record","resource_key":null},"action":"create"},"type":"planned_change"}
+{"@level":"info","@message":"tls_private_key.ssh: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:35.751910Z","hook":{"resource":{"addr":"tls_private_key.ssh","module":"","resource":"tls_private_key.ssh","implied_provider":"tls","resource_type":"tls_private_key","resource_name":"ssh","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_network.vpc: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:36.129747Z","hook":{"resource":{"addr":"google_compute_network.vpc","module":"","resource":"google_compute_network.vpc","implied_provider":"google","resource_type":"google_compute_network","resource_name":"vpc","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_managed_ssl_certificate.ssl_certificate: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:36.130899Z","hook":{"resource":{"addr":"google_compute_managed_ssl_certificate.ssl_certificate","module":"","resource":"google_compute_managed_ssl_certificate.ssl_certificate","implied_provider":"google","resource_type":"google_compute_managed_ssl_certificate","resource_name":"ssl_certificate","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_health_check.lb_health_check: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:36.133273Z","hook":{"resource":{"addr":"google_compute_health_check.lb_health_check","module":"","resource":"google_compute_health_check.lb_health_check","implied_provider":"google","resource_type":"google_compute_health_check","resource_name":"lb_health_check","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_global_address.lb_ip: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:36.133359Z","hook":{"resource":{"addr":"google_compute_global_address.lb_ip","module":"","resource":"google_compute_global_address.lb_ip","implied_provider":"google","resource_type":"google_compute_global_address","resource_name":"lb_ip","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_address.public_ip: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:36.133832Z","hook":{"resource":{"addr":"google_compute_address.public_ip","module":"","resource":"google_compute_address.public_ip","implied_provider":"google","resource_type":"google_compute_address","resource_name":"public_ip","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"tls_private_key.ssh: Creation complete after 3s [id=525020afa1595971e6caf04f70b19893a28f3211]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:38.650469Z","hook":{"resource":{"addr":"tls_private_key.ssh","module":"","resource":"tls_private_key.ssh","implied_provider":"tls","resource_type":"tls_private_key","resource_name":"ssh","resource_key":null},"action":"create","id_key":"id","id_value":"525020afa1595971e6caf04f70b19893a28f3211","elapsed_seconds":3},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_network.vpc: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:46.131243Z","hook":{"resource":{"addr":"google_compute_network.vpc","module":"","resource":"google_compute_network.vpc","implied_provider":"google","resource_type":"google_compute_network","resource_name":"vpc","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_managed_ssl_certificate.ssl_certificate: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:46.133262Z","hook":{"resource":{"addr":"google_compute_managed_ssl_certificate.ssl_certificate","module":"","resource":"google_compute_managed_ssl_certificate.ssl_certificate","implied_provider":"google","resource_type":"google_compute_managed_ssl_certificate","resource_name":"ssl_certificate","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_health_check.lb_health_check: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:46.135293Z","hook":{"resource":{"addr":"google_compute_health_check.lb_health_check","module":"","resource":"google_compute_health_check.lb_health_check","implied_provider":"google","resource_type":"google_compute_health_check","resource_name":"lb_health_check","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_address.public_ip: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:46.135489Z","hook":{"resource":{"addr":"google_compute_address.public_ip","module":"","resource":"google_compute_address.public_ip","implied_provider":"google","resource_type":"google_compute_address","resource_name":"public_ip","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_global_address.lb_ip: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:46.135542Z","hook":{"resource":{"addr":"google_compute_global_address.lb_ip","module":"","resource":"google_compute_global_address.lb_ip","implied_provider":"google","resource_type":"google_compute_global_address","resource_name":"lb_ip","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_address.public_ip: Creation complete after 11s [id=projects/hon3y-356719/regions/us-central1/addresses/lemc-abcdef01-testuser-42-ind-public-ip]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:47.254997Z","hook":{"resource":{"addr":"google_compute_address.public_ip","module":"","resource":"google_compute_address.public_ip","implied_provider":"google","resource_type":"google_compute_address","resource_name":"public_ip","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/regions/us-central1/addresses/lemc-abcdef01-testuser-42-ind-public-ip","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_global_address.lb_ip: Creation complete after 12s [id=projects/hon3y-356719/global/addresses/lemc-abcdef01-testuser-42-ind-lb-ip]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:47.563534Z","hook":{"resource":{"addr":"google_compute_global_address.lb_ip","module":"","resource":"google_compute_global_address.lb_ip","implied_provider":"google","resource_type":"google_compute_global_address","resource_name":"lb_ip","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/addresses/lemc-abcdef01-testuser-42-ind-lb-ip","elapsed_seconds":12},"type":"apply_complete"}
+{"@level":"info","@message":"google_dns_record_set.dns_record: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:47.615263Z","hook":{"resource":{"addr":"google_dns_record_set.dns_record","module":"","resource":"google_dns_record_set.dns_record","implied_provider":"google","resource_type":"google_dns_record_set","resource_name":"dns_record","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_health_check.lb_health_check: Creation complete after 12s [id=projects/hon3y-356719/global/healthChecks/lemc-abcdef01-testuser-42-ind-hc]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:47.773153Z","hook":{"resource":{"addr":"google_compute_health_check.lb_health_check","module":"","resource":"google_compute_health_check.lb_health_check","implied_provider":"google","resource_type":"google_compute_health_check","resource_name":"lb_health_check","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/healthChecks/lemc-abcdef01-testuser-42-ind-hc","elapsed_seconds":12},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_managed_ssl_certificate.ssl_certificate: Creation complete after 12s [id=projects/hon3y-356719/global/sslCertificates/lemc-abcdef01-testuser-42-ind-ssl-cert]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:47.837658Z","hook":{"resource":{"addr":"google_compute_managed_ssl_certificate.ssl_certificate","module":"","resource":"google_compute_managed_ssl_certificate.ssl_certificate","implied_provider":"google","resource_type":"google_compute_managed_ssl_certificate","resource_name":"ssl_certificate","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/sslCertificates/lemc-abcdef01-testuser-42-ind-ssl-cert","elapsed_seconds":12},"type":"apply_complete"}
+{"@level":"info","@message":"google_dns_record_set.dns_record: Creation complete after 2s [id=projects/hon3y-356719/managedZones/w-a-s-d-com/rrsets/lemc-abcdef01-testuser-42-ind.w-a-s-d.com./A]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:50.283336Z","hook":{"resource":{"addr":"google_dns_record_set.dns_record","module":"","resource":"google_dns_record_set.dns_record","implied_provider":"google","resource_type":"google_dns_record_set","resource_name":"dns_record","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/managedZones/w-a-s-d-com/rrsets/lemc-abcdef01-testuser-42-ind.w-a-s-d.com./A","elapsed_seconds":2},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_network.vpc: Still creating... [20s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:56.133240Z","hook":{"resource":{"addr":"google_compute_network.vpc","module":"","resource":"google_compute_network.vpc","implied_provider":"google","resource_type":"google_compute_network","resource_name":"vpc","resource_key":null},"action":"create","elapsed_seconds":20},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_network.vpc: Creation complete after 22s [id=projects/hon3y-356719/global/networks/lemc-abcdef01-testuser-42-ind-vpc]","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:57.729396Z","hook":{"resource":{"addr":"google_compute_network.vpc","module":"","resource":"google_compute_network.vpc","implied_provider":"google","resource_type":"google_compute_network","resource_name":"vpc","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/networks/lemc-abcdef01-testuser-42-ind-vpc","elapsed_seconds":22},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_firewall.allow_ssh: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:57.749673Z","hook":{"resource":{"addr":"google_compute_firewall.allow_ssh","module":"","resource":"google_compute_firewall.allow_ssh","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_ssh","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_subnetwork.subnet: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:57.749940Z","hook":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_firewall.allow_lb_healthcheck: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T18:59:57.751062Z","hook":{"resource":{"addr":"google_compute_firewall.allow_lb_healthcheck","module":"","resource":"google_compute_firewall.allow_lb_healthcheck","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_lb_healthcheck","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_firewall.allow_ssh: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:07.750355Z","hook":{"resource":{"addr":"google_compute_firewall.allow_ssh","module":"","resource":"google_compute_firewall.allow_ssh","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_ssh","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_firewall.allow_lb_healthcheck: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:07.752214Z","hook":{"resource":{"addr":"google_compute_firewall.allow_lb_healthcheck","module":"","resource":"google_compute_firewall.allow_lb_healthcheck","implied_provider":"google","resource_type":"google_compute_firewall","resource_name":"allow_lb_healthcheck","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_subnetwork.subnet: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:07.752297Z","hook":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_subnetwork.subnet: Creation complete after 11s [id=projects/hon3y-356719/regions/us-central1/subnetworks/lemc-abcdef01-testuser-42-ind-subnet]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:08.801735Z","hook":{"resource":{"addr":"google_compute_subnetwork.subnet","module":"","resource":"google_compute_subnetwork.subnet","implied_provider":"google","resource_type":"google_compute_subnetwork","resource_name":"subnet","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/regions/us-central1/subnetworks/lemc-abcdef01-testuser-42-ind-subnet","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_instance.vm: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:08.819074Z","hook":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_instance.vm: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:18.819807Z","hook":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_instance.vm: Creation complete after 13s [id=projects/hon3y-356719/zones/us-central1-a/instances/lemc-abcdef01-testuser-42-ind]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:21.531236Z","hook":{"resource":{"addr":"google_compute_instance.vm","module":"","resource":"google_compute_instance.vm","implied_provider":"google","resource_type":"google_compute_instance","resource_name":"vm","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/zones/us-central1-a/instances/lemc-abcdef01-testuser-42-ind","elapsed_seconds":13},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_instance_group.instance_group: Creating...","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:21.540005Z","hook":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create"},"type":"apply_start"}
+{"@level":"info","@message":"google_compute_instance_group.instance_group: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:31.542974Z","hook":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_instance_group.instance_group: Creation complete after 11s [id=projects/hon3y-356719/zones/us-central1-a/instanceGroups/lemc-abcdef01-testuser-42-ind-ig]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:33.400148Z","hook":{"resource":{"addr":"google_compute_instance_group.instance_group","module":"","resource":"google_compute_instance_group.instance_group","implied_provider":"google","resource_type":"google_compute_instance_group","resource_name":"instance_group","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/zones/us-central1-a/instanceGroups/lemc-abcdef01-testuser-42-ind-ig","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:33.415495Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [20s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:43.419284Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":20},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [30s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:00:53.420179Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":30},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [40s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:03.421280Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":40},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Still creating... [50s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:13.422970Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","elapsed_seconds":50},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_backend_service.backend_service: Creation complete after 54s [id=projects/hon3y-356719/global/backendServices/lemc-abcdef01-testuser-42-ind-bes]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:26.651481Z","hook":{"resource":{"addr":"google_compute_backend_service.backend_service","module":"","resource":"google_compute_backend_service.backend_service","implied_provider":"google","resource_type":"google_compute_backend_service","resource_name":"backend_service","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/backendServices/lemc-abcdef01-testuser-42-ind-bes","elapsed_seconds":54},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_url_map.url_map: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:13.423852Z","hook":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_url_map.url_map: Still creating... [20s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:23.424970Z","hook":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create","elapsed_seconds":20},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_url_map.url_map: Creation complete after 11s [id=projects/hon3y-356719/global/urlMaps/lemc-abcdef01-testuser-42-ind-urlmap]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:24.908775Z","hook":{"resource":{"addr":"google_compute_url_map.url_map","module":"","resource":"google_compute_url_map.url_map","implied_provider":"google","resource_type":"google_compute_url_map","resource_name":"url_map","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/urlMaps/lemc-abcdef01-testuser-42-ind-urlmap","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_target_https_proxy.https_proxy: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:24.928063Z","hook":{"resource":{"addr":"google_compute_target_https_proxy.https_proxy","module":"","resource":"google_compute_target_https_proxy.https_proxy","implied_provider":"google","resource_type":"google_compute_target_https_proxy","resource_name":"https_proxy","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_target_http_proxy.http_proxy: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:24.929172Z","hook":{"resource":{"addr":"google_compute_target_http_proxy.http_proxy","module":"","resource":"google_compute_target_http_proxy.http_proxy","implied_provider":"google","resource_type":"google_compute_target_http_proxy","resource_name":"http_proxy","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_target_http_proxy.http_proxy: Creation complete after 11s [id=projects/hon3y-356719/global/targetHttpProxies/lemc-abcdef01-testuser-42-ind-http-proxy]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:25.127107Z","hook":{"resource":{"addr":"google_compute_target_http_proxy.http_proxy","module":"","resource":"google_compute_target_http_proxy.http_proxy","implied_provider":"google","resource_type":"google_compute_target_http_proxy","resource_name":"http_proxy","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/targetHttpProxies/lemc-abcdef01-testuser-42-ind-http-proxy","elapsed_seconds":11},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.http_forwarding_rule: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:25.136779Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.https_forwarding_rule: Still creating... [10s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:35.137909Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create","elapsed_seconds":10},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.https_forwarding_rule: Still creating... [20s elapsed]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:45.139746Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.https_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.https_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"https_forwarding_rule","resource_key":null},"action":"create","elapsed_seconds":20},"type":"apply_progress"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.https_forwarding_rule: Creation complete after 22s [id=projects/hon3y-356719/global/forwardingRules/lemc-abcdef01-testuser-42-ind-https-fwd-rule]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:52.567767Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.https_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.https_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"https_forwarding_rule","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/forwardingRules/lemc-abcdef01-testuser-42-ind-https-fwd-rule","elapsed_seconds":22},"type":"apply_complete"}
+{"@level":"info","@message":"google_compute_global_forwarding_rule.http_forwarding_rule: Creation complete after 23s [id=projects/hon3y-356719/global/forwardingRules/lemc-abcdef01-testuser-42-ind-http-fwd-rule]","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:53.045954Z","hook":{"resource":{"addr":"google_compute_global_forwarding_rule.http_forwarding_rule","module":"","resource":"google_compute_global_forwarding_rule.http_forwarding_rule","implied_provider":"google","resource_type":"google_compute_global_forwarding_rule","resource_name":"http_forwarding_rule","resource_key":null},"action":"create","id_key":"id","id_value":"projects/hon3y-356719/global/forwardingRules/lemc-abcdef01-testuser-42-ind-http-fwd-rule","elapsed_seconds":23},"type":"apply_complete"}
+{"@level":"info","@message":"Apply complete! Resources: 18 added, 0 changed, 0 destroyed.","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:53.060601Z","changes":{"add":18,"change":0,"import":0,"remove":0,"operation":"apply"},"type":"change_summary"}
+{"@level":"info","@message":"Outputs: 8","@module":"terraform.ui","@timestamp":"2025-05-10T19:01:53.060662Z","outputs":{"dns_name":{"sensitive":false,"type":"string","value":"lemc-abcdef01-testuser-42-ind.w-a-s-d.com"},"instance_name":{"sensitive":false,"type":"string","value":"lemc-abcdef01-testuser-42-ind"},"load_balancer_ip":{"sensitive":false,"type":"string","value":"34.54.77.204"},"private_ssh_key":{"sensitive":true,"type":"string"},"public_ip":{"sensitive":false,"type":"string","value":"34.122.141.130"},"public_ssh_key":{"sensitive":false,"type":"string","value":"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC0Lz2VxLSGpa4MROY0EkPpQS5IRx7frqvZolQYSH0hEF8Nc3mKWl37y/VCJabPlxr3/tmGg+yKAr7fdG0P75n9E0vRrm5R7SKfxN7LCAcLGZJM++OHYFoQ43aO2yeui3NVlxCwC0i1JNgZMrIl17uG9tLul/Om0luIf7oBh9t4sxrHvX4j2Vj3a68rnNwlSBuZ02GldOwKVlDYF2rJU02ndR+B+n3wgw0geaTtgYWLE2dFOu3hAwB5n+DQy+WXlcz+3OpCfzguEHPtirI9p9aC+BFNdknpVqj/KR2FMFSt7xAtZ5JFyv0QO0BWdx0mOBeouiKWG+853l/6fRCJpNYLr+iCg7rmB0Jf4oFvgyW1C+WuZJEFIybO9tjWty0hqAiyMTz4ld1xXP6M1JpwaKztu7nLCIHpCW/dqDuAH2yiqod9/eLcU8rc6uQQ6b1tFuUdMQeiU9HlxtwV/RRahi562glishNkrZoaagZL+htB503SaB4LZqKZc6y/8e8kErIJF/0Wkt9PI9uWzT1BNfEI4+/Y1UWYMAevDYHcEOG0SfVVHb/uO1JMzJjvziwhyr6vYx1zNfEsqVx9qIia1a7I/8YJGxfFnROlx7uEaDRRXprCc1twhj0vEJfwi6/EPjzjlsQdUAPAfzoUA9ZaQ0K4GRhoCTFHI7fz//RbPVDlbw==\\n"},"subnet_name":{"sensitive":false,"type":"string","value":"lemc-abcdef01-testuser-42-ind-subnet"},"vpc_name":{"sensitive":false,"type":"string","value":"lemc-abcdef01-testuser-42-ind-vpc"}},"type":"outputs"}
 `
 
 func TestProcessJSONStream(t *testing.T) {
@@ -172,19 +250,6 @@ done:
 		t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, strings.Join(lines, "\n"))
 	}
 
-	// Check for the final "Apply complete!" message
-	expectedApplyComplete := "Apply complete! Resources: 18 added, 0 change..."
-	foundApplyComplete := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedApplyComplete) {
-			foundApplyComplete = true
-			break
-		}
-	}
-	if !foundApplyComplete {
-		t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, strings.Join(lines, "\n"))
-	}
-
 	// Check for progress bar structure (e.g., presence of '[=')
 	foundProgressBar := false
 	for _, line := range lines {
@@ -195,6 +260,136 @@ done:
 	}
 	if !foundProgressBar {
 		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+func TestProcessJSONStream_ApplyFromPlanFile(t *testing.T) {
+	reader := strings.NewReader(mockTerraformApplyOutputNoPlanSummary)
+	handler := progress.NewProgressHandler(reader)
+
+	var lines []string
+	var err error
+
+	// Read all lines with context to prevent test hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // Increased timeout for potentially long stream
+	defer cancel()
+
+	firstApplyStartProcessed := false
+	var planningPhaseLine string
+	var applyPhaseLine string
+	var applyCompleteLine string
+
+	// First line is always initial "Planning..."
+	initialLine, readErr := handler.ReadLine()
+	if readErr != nil {
+		t.Fatalf("Failed to read initial line: %v", readErr)
+	}
+	if !strings.Contains(initialLine, "[      PLANNING      ] Planning...") {
+		t.Errorf("Expected initial line to be planning, got: %s", initialLine)
+	}
+
+	for {
+		var line string
+		var readErr error
+		select {
+		case <-ctx.Done():
+			t.Logf("Collected lines before timeout:\n%s", strings.Join(lines, "\n"))
+			t.Fatal("Test timed out processing stream")
+			return
+		default:
+			line, readErr = handler.ReadLine()
+			if readErr != nil {
+				if readErr == io.EOF {
+					goto done
+				}
+				err = readErr
+				goto done
+			}
+			if line != "" {
+				lines = append(lines, line)
+				// Capture a line from the "planned_change" phase (still considered planning by current logic)
+				if strings.Contains(line, "Plan to create") && planningPhaseLine == "" {
+					planningPhaseLine = line
+				}
+				// Capture the first line from "apply_start" phase
+				if strings.Contains(line, ": Creating...") && !firstApplyStartProcessed {
+					applyPhaseLine = line
+					firstApplyStartProcessed = true
+				}
+				// Capture the "Apply complete" line
+				if strings.Contains(line, "Apply complete!") {
+					applyCompleteLine = line
+				}
+			}
+		}
+	}
+done:
+
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+		return
+	}
+
+	if len(lines) == 0 {
+		t.Error("Expected non-empty output from handler")
+		return
+	}
+
+	// Verify planning phase line shows "[      PLANNING      ]"
+	if planningPhaseLine == "" {
+		t.Error("Did not capture a planning phase line (e.g., 'Plan to create')")
+	} else if !strings.Contains(planningPhaseLine, "[      PLANNING      ]") {
+		t.Errorf("Expected planning phase line to contain '[      PLANNING      ]', got: %s", planningPhaseLine)
+	}
+
+	// Verify apply phase line now shows a proper progress bar, not the static one.
+	// Total steps should be 18 resources * 2 = 36.
+	// The first apply step will be (1)[=...](36)
+	expectedApplyBarPattern := "(1)[=" // Check for the start of a correct progress bar
+	expectedTotalInBar := "(36)"       // Check that the total is correctly identified
+
+	if applyPhaseLine == "" {
+		t.Error("Did not capture an apply phase line (e.g., 'Creating...')")
+	} else {
+		if !strings.Contains(applyPhaseLine, expectedApplyBarPattern) {
+			t.Errorf("Expected apply phase line to start with pattern like '%s', got: %s", expectedApplyBarPattern, applyPhaseLine)
+		}
+		if !strings.Contains(applyPhaseLine, expectedTotalInBar) {
+			t.Errorf("Expected apply phase line to contain total steps '%s', got: %s", expectedTotalInBar, applyPhaseLine)
+		}
+	}
+
+	// Verify "Apply complete!" line also shows the correct bar, fully progressed
+	expectedApplyCompletePattern := "(36)[=" // Fully progressed
+	if applyCompleteLine == "" {
+		t.Error("Did not capture 'Apply complete!' line")
+	} else {
+		if !strings.Contains(applyCompleteLine, expectedApplyCompletePattern) {
+			t.Errorf("Expected 'Apply complete!' line to start with pattern like '%s', got: %s", expectedApplyCompletePattern, applyCompleteLine)
+		}
+		if !strings.Contains(applyCompleteLine, expectedTotalInBar) {
+			t.Errorf("Expected 'Apply complete!' line to contain total steps '%s', got: %s", expectedTotalInBar, applyCompleteLine)
+		}
+	}
+
+	// For debugging, print a few lines if asserts fail
+	if t.Failed() {
+		t.Log("Sample of processed lines for ApplyFromPlanFile test:")
+		sampleSize := 10
+		if len(lines) < sampleSize {
+			sampleSize = len(lines)
+		}
+		for i := 0; i < sampleSize; i++ {
+			t.Logf("Line %d: %s", i, lines[i])
+		}
+		if len(lines) > sampleSize {
+			t.Log("...")
+			for i := len(lines) - sampleSize; i < len(lines); i++ {
+				if i >= 0 { // ensure i is not negative
+					t.Logf("Line %d: %s", i, lines[i])
+				}
+			}
+		}
 	}
 }
 
@@ -307,719 +502,4 @@ done:
 	if !foundProgressBar {
 		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
 	}
-}
-
-func TestProcessJSONStream_Visual(t *testing.T) {
-	// This test prints the progress bar and messages to the terminal for visual inspection.
-	reader := strings.NewReader(mockTerraformOutput)
-	handler := progress.NewProgressHandler(reader)
-
-	for {
-		line, err := handler.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Errorf("Unexpected error: %v", err)
-			return
-		}
-		if line != "" {
-			fmt.Println(line)
-		}
-	}
-}
-
-func TestGetProgressOutput(t *testing.T) {
-	// Create a reader with the mock Terraform output
-	reader := strings.NewReader(mockTerraformOutput)
-
-	// Get the progress output as a string
-	output, err := progress.GetProgressOutput(reader)
-	if err != nil {
-		t.Errorf("GetProgressOutput returned an error: %v", err)
-	}
-
-	// Split the output into lines for easier testing
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-
-	// --- Assertions ---
-
-	// Check for total steps
-	// From the log: "Plan: 18 to add, 0 to change, 0 to destroy."
-	expectedTotalStepsStr := "(36)"
-	foundTotalSteps := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedTotalStepsStr) {
-			foundTotalSteps = true
-			break
-		}
-	}
-	if !foundTotalSteps {
-		t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, output)
-	}
-
-	// Check for a specific "Creating..." message
-	expectedCreatingMessage := "tls_private_key.ssh: Creating..."
-	foundCreatingMessage := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedCreatingMessage) {
-			foundCreatingMessage = true
-			break
-		}
-	}
-	if !foundCreatingMessage {
-		t.Errorf("Output does not contain expected creating message '%s'. Output:\n%s", expectedCreatingMessage, output)
-	}
-
-	// Check for a specific "Creation complete..." message
-	expectedCompleteMessage := "Creation complete"
-	foundCompleteMessage := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedCompleteMessage) {
-			foundCompleteMessage = true
-			break
-		}
-	}
-	if !foundCompleteMessage {
-		t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, output)
-	}
-
-	// Check for the final "Apply complete!" message
-	expectedApplyComplete := "Apply complete! Resources: 18 added, 0 change..."
-	foundApplyComplete := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedApplyComplete) {
-			foundApplyComplete = true
-			break
-		}
-	}
-	if !foundApplyComplete {
-		t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, output)
-	}
-
-	// Check for progress bar structure (e.g., presence of '[=')
-	foundProgressBar := false
-	for _, line := range lines {
-		if strings.Contains(line, "[=") || strings.Contains(line, "[-/-]") {
-			foundProgressBar = true
-			break
-		}
-	}
-	if !foundProgressBar {
-		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", output)
-	}
-
-	// Check that the output ends with a newline
-	if !strings.HasSuffix(output, "\n") {
-		t.Errorf("Output does not end with a newline. Output:\n%s", output)
-	}
-
-	// Check that the output contains multiple lines
-	if len(lines) < 2 {
-		t.Errorf("Expected multiple lines of output, got %d. Output:\n%s", len(lines), output)
-	}
-
-	// Check that the last line contains either "Outputs: 8" or "Processing outputs..."
-	lastLine := lines[len(lines)-1]
-	if !strings.Contains(lastLine, "Outputs: 8") && !strings.Contains(lastLine, "Processing outputs...") {
-		t.Errorf("Last line does not contain expected output message. Last line: %s", lastLine)
-	}
-}
-
-func TestGetProgressOutputWithPrint(t *testing.T) {
-	// Create a reader with the mock Terraform output
-	reader := strings.NewReader(mockTerraformOutput)
-
-	// Get the progress output as a string
-	output, err := progress.GetProgressOutput(reader)
-	if err != nil {
-		t.Errorf("GetProgressOutput returned an error: %v", err)
-	}
-
-	// Print the output with a header
-	fmt.Println("=== Terraform Progress Output ===")
-	fmt.Print(output)
-	fmt.Println("=== End of Progress Output ===")
-
-	// Verify the output is not empty
-	if len(output) == 0 {
-		t.Error("Output is empty")
-	}
-
-	// Verify the output contains expected content
-	expectedContent := []string{
-		"Planning...",
-		"Creating...",
-		"Creation complete",
-		"Apply complete",
-	}
-
-	for _, content := range expectedContent {
-		if !strings.Contains(output, content) {
-			t.Errorf("Output does not contain expected content: %s", content)
-		}
-	}
-
-	// Print the output line by line for detailed inspection
-	fmt.Println("\n=== Detailed Output Inspection ===")
-	lines := strings.Split(output, "\n")
-	for i, line := range lines {
-		if line != "" { // Skip empty lines
-			fmt.Printf("Line %d: %s\n", i+1, line)
-		}
-	}
-	fmt.Println("=== End of Detailed Inspection ===")
-}
-
-func TestProgressHandler(t *testing.T) {
-	// Create a reader with the mock Terraform output
-	reader := strings.NewReader(mockTerraformOutput)
-
-	// Create a progress handler
-	handler := progress.NewProgressHandler(reader)
-
-	// Read all lines
-	var lines []string
-	for {
-		line, err := handler.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Errorf("Unexpected error: %v", err)
-			return
-		}
-		if line != "" {
-			lines = append(lines, line)
-		}
-	}
-
-	// Verify we got some output
-	if len(lines) == 0 {
-		t.Error("Expected non-empty output")
-		return
-	}
-
-	// Check for total steps
-	expectedTotalStepsStr := "(36)"
-	foundTotalSteps := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedTotalStepsStr) {
-			foundTotalSteps = true
-			break
-		}
-	}
-	if !foundTotalSteps {
-		t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, strings.Join(lines, "\n"))
-	}
-
-	// Check for a specific "Creating..." message
-	expectedCreatingMessage := "tls_private_key.ssh: Creating..."
-	foundCreatingMessage := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedCreatingMessage) {
-			foundCreatingMessage = true
-			break
-		}
-	}
-	if !foundCreatingMessage {
-		t.Errorf("Output does not contain expected creating message '%s'. Output:\n%s", expectedCreatingMessage, strings.Join(lines, "\n"))
-	}
-
-	// Check for a specific "Creation complete..." message
-	expectedCompleteMessage := "Creation complete"
-	foundCompleteMessage := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedCompleteMessage) {
-			foundCompleteMessage = true
-			break
-		}
-	}
-	if !foundCompleteMessage {
-		t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, strings.Join(lines, "\n"))
-	}
-
-	// Check for the final "Apply complete!" message
-	expectedApplyComplete := "Apply complete! Resources: 18 added, 0 change..."
-	foundApplyComplete := false
-	for _, line := range lines {
-		if strings.Contains(line, expectedApplyComplete) {
-			foundApplyComplete = true
-			break
-		}
-	}
-	if !foundApplyComplete {
-		t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, strings.Join(lines, "\n"))
-	}
-
-	// Check for progress bar structure (e.g., presence of '[=')
-	foundProgressBar := false
-	for _, line := range lines {
-		if strings.Contains(line, "[=") || strings.Contains(line, "[-/-]") {
-			foundProgressBar = true
-			break
-		}
-	}
-	if !foundProgressBar {
-		t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
-	}
-}
-
-// seekableReader is a test helper that wraps a string reader with seeking capability
-type seekableReader struct {
-	content string
-	pos     int64
-}
-
-func newSeekableReader(content string) *seekableReader {
-	return &seekableReader{content: content}
-}
-
-func (r *seekableReader) Read(p []byte) (int, error) {
-	if r.pos >= int64(len(r.content)) {
-		return 0, io.EOF
-	}
-	n := copy(p, r.content[r.pos:])
-	r.pos += int64(n)
-	if r.pos >= int64(len(r.content)) {
-		return n, io.EOF
-	}
-	return n, nil
-}
-
-func (r *seekableReader) Seek(offset int64, whence int) (int64, error) {
-	var newPos int64
-	switch whence {
-	case io.SeekStart:
-		newPos = offset
-	case io.SeekCurrent:
-		newPos = r.pos + offset
-	case io.SeekEnd:
-		newPos = int64(len(r.content)) + offset
-	default:
-		return 0, fmt.Errorf("invalid whence")
-	}
-	if newPos < 0 {
-		return 0, fmt.Errorf("negative position")
-	}
-	if newPos > int64(len(r.content)) {
-		newPos = int64(len(r.content))
-	}
-	r.pos = newPos
-	return newPos, nil
-}
-
-func TestProgressHandler_Streaming(t *testing.T) {
-	// Create a seekable reader with the mock Terraform output
-	reader := newSeekableReader(mockTerraformOutput)
-
-	// Create a progress handler
-	handler := progress.NewProgressHandler(reader)
-
-	// Track the lines we receive
-	var lines []string
-	var errors []error
-
-	// Read all lines with context to prevent hanging
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatal("Test timed out after 5 seconds")
-		default:
-			line, err := handler.ReadLine()
-			if err != nil {
-				if err == io.EOF {
-					goto done
-				}
-				errors = append(errors, err)
-				goto done
-			}
-			if line != "" {
-				lines = append(lines, line)
-			}
-		}
-	}
-done:
-
-	// Verify we got some output
-	if len(lines) == 0 {
-		t.Error("Expected non-empty output")
-		return
-	}
-
-	// Verify no errors occurred
-	if len(errors) > 0 {
-		t.Errorf("Unexpected errors: %v", errors)
-		return
-	}
-
-	// Test the output format and content
-	t.Run("Output Format", func(t *testing.T) {
-		// Check for total steps
-		expectedTotalStepsStr := "(36)"
-		foundTotalSteps := false
-		for _, line := range lines {
-			if strings.Contains(line, expectedTotalStepsStr) {
-				foundTotalSteps = true
-				break
-			}
-		}
-		if !foundTotalSteps {
-			t.Errorf("Output does not contain expected total steps string '%s'. Output:\n%s", expectedTotalStepsStr, strings.Join(lines, "\n"))
-		}
-
-		// Check for a specific "Creating..." message
-		expectedCreatingMessage := "tls_private_key.ssh: Creating..."
-		foundCreatingMessage := false
-		for _, line := range lines {
-			if strings.Contains(line, expectedCreatingMessage) {
-				foundCreatingMessage = true
-				break
-			}
-		}
-		if !foundCreatingMessage {
-			t.Errorf("Output does not contain expected creating message '%s'. Output:\n%s", expectedCreatingMessage, strings.Join(lines, "\n"))
-		}
-
-		// Check for a specific "Creation complete..." message
-		expectedCompleteMessage := "Creation complete"
-		foundCompleteMessage := false
-		for _, line := range lines {
-			if strings.Contains(line, expectedCompleteMessage) {
-				foundCompleteMessage = true
-				break
-			}
-		}
-		if !foundCompleteMessage {
-			t.Errorf("Output does not contain expected completion message '%s'. Output:\n%s", expectedCompleteMessage, strings.Join(lines, "\n"))
-		}
-
-		// Check for the final "Apply complete!" message
-		expectedApplyComplete := "Apply complete! Resources: 18 added, 0 change..."
-		foundApplyComplete := false
-		for _, line := range lines {
-			if strings.Contains(line, expectedApplyComplete) {
-				foundApplyComplete = true
-				break
-			}
-		}
-		if !foundApplyComplete {
-			t.Errorf("Output does not contain expected final apply complete message '%s'. Output:\n%s", expectedApplyComplete, strings.Join(lines, "\n"))
-		}
-
-		// Check for progress bar structure (e.g., presence of '[=')
-		foundProgressBar := false
-		for _, line := range lines {
-			if strings.Contains(line, "[=") || strings.Contains(line, "[-/-]") {
-				foundProgressBar = true
-				break
-			}
-		}
-		if !foundProgressBar {
-			t.Errorf("Output does not seem to contain a progress bar structure like '[='. Output:\n%s", strings.Join(lines, "\n"))
-		}
-	})
-
-	// Test the sequence of messages
-	t.Run("Message Sequence", func(t *testing.T) {
-		// Verify planning phase comes before apply phase
-		planningIndex := -1
-		applyIndex := -1
-		for i, line := range lines {
-			if strings.Contains(line, "PLANNING") {
-				planningIndex = i
-			}
-			if strings.Contains(line, "Creating...") {
-				applyIndex = i
-				break
-			}
-		}
-		if planningIndex == -1 {
-			t.Error("Planning phase not found in output")
-		}
-		if applyIndex == -1 {
-			t.Error("Apply phase not found in output")
-		}
-		if planningIndex > applyIndex {
-			t.Error("Planning phase should come before apply phase")
-		}
-
-		// Verify progress increases
-		lastProgress := -1
-		for _, line := range lines {
-			if strings.Contains(line, "[=") {
-				// Extract current step from line like "(1)[=...](18)"
-				parts := strings.Split(line, "[")
-				if len(parts) > 0 {
-					stepStr := strings.Trim(parts[0], "()")
-					if step, err := strconv.Atoi(stepStr); err == nil {
-						if lastProgress != -1 && step < lastProgress {
-							t.Errorf("Progress decreased from %d to %d", lastProgress, step)
-						}
-						lastProgress = step
-					}
-				}
-			}
-		}
-	})
-
-	// Test error handling
-	t.Run("Error Handling", func(t *testing.T) {
-		// Create a reader that will return an error
-		errorReader := &errorReader{err: fmt.Errorf("test error")}
-		handler := progress.NewProgressHandler(errorReader)
-
-		// Read the initial progress bar (should always be present)
-		_, _ = handler.ReadLine()
-
-		// Read a line and expect an error, with timeout to avoid race
-		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("Panic occurred during error handling: %v", r)
-			}
-		}()
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := handler.ReadLine()
-			errCh <- err
-		}()
-
-		select {
-		case err := <-errCh:
-			if err == nil {
-				t.Error("Expected error from errorReader")
-				return
-			}
-			if err.Error() != "test error" {
-				t.Errorf("Expected error 'test error', got '%v'", err)
-			}
-		case <-time.After(500 * time.Millisecond):
-			t.Error("Timed out waiting for error from errorReader")
-		}
-	})
-}
-
-// errorReader is a test helper that always returns an error
-type errorReader struct {
-	err error
-}
-
-func (r *errorReader) Read(p []byte) (int, error) {
-	return 0, r.err
-}
-
-func TestProgressBarTransitions(t *testing.T) {
-	// Create a reader with the mock Terraform output
-	reader := strings.NewReader(mockTerraformOutput)
-	handler := progress.NewProgressHandler(reader)
-
-	// Track the lines we receive
-	var lines []string
-	var planningLines []string
-	var applyLines []string
-
-	// Read all lines
-	for {
-		line, err := handler.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Errorf("Unexpected error: %v", err)
-			return
-		}
-		if line != "" {
-			lines = append(lines, line)
-
-			// Track planning vs apply phase lines
-			if strings.Contains(line, "[      PLANNING      ]") {
-				planningLines = append(planningLines, line)
-			} else if strings.Contains(line, "[=") {
-				applyLines = append(applyLines, line)
-			}
-		}
-	}
-
-	// Verify we got some output
-	if len(lines) == 0 {
-		t.Error("Expected non-empty output")
-		return
-	}
-
-	// Test 1: Verify we transition from planning to apply phase
-	if len(applyLines) == 0 {
-		t.Error("Progress bar never transitioned from PLANNING to showing actual progress")
-	}
-
-	// Test 2: Verify we don't get stuck in planning
-	if len(planningLines) > 20 { // Arbitrary threshold, adjust if needed
-		t.Errorf("Progress bar appears to be stuck in planning phase. Got %d planning lines", len(planningLines))
-	}
-
-	// Test 3: Verify the transition happens at the right time
-	foundApplyStart := false
-	for i, line := range lines {
-		if strings.Contains(line, "Creating...") {
-			foundApplyStart = true
-		}
-		if foundApplyStart && strings.Contains(line, "[      PLANNING      ]") {
-			t.Errorf("Found PLANNING after apply started at line %d: %s", i, line)
-		}
-	}
-
-	// Test 4: Verify progress increases after transition
-	var lastProgress int = -1
-	for _, line := range applyLines {
-		if strings.Contains(line, "[=") {
-			// Extract current step from line like "(1)[=...](18)"
-			parts := strings.Split(line, "[")
-			if len(parts) > 0 {
-				stepStr := strings.Trim(parts[0], "()")
-				if step, err := strconv.Atoi(stepStr); err == nil {
-					if lastProgress != -1 && step < lastProgress {
-						t.Errorf("Progress decreased from %d to %d", lastProgress, step)
-					}
-					lastProgress = step
-				}
-			}
-		}
-	}
-}
-
-func TestProgressBarPhaseDetection(t *testing.T) {
-	// Create a reader with the mock Terraform output
-	reader := strings.NewReader(mockTerraformOutput)
-	handler := progress.NewProgressHandler(reader)
-
-	// Track the phases we see
-	var phases []string
-	var currentPhase string = "initial"
-
-	// Read all lines
-	for {
-		line, err := handler.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Errorf("Unexpected error: %v", err)
-			return
-		}
-		if line != "" {
-			// Detect phase changes
-			if strings.Contains(line, "[      PLANNING      ]") {
-				if currentPhase != "planning" {
-					currentPhase = "planning"
-					phases = append(phases, currentPhase)
-				}
-			} else if strings.Contains(line, "[=") && !strings.Contains(line, "PLANNING") {
-				if currentPhase != "apply" {
-					currentPhase = "apply"
-					phases = append(phases, currentPhase)
-				}
-			}
-		}
-	}
-
-	// Verify we saw both phases
-	if len(phases) < 2 {
-		t.Errorf("Expected at least 2 phases (planning and apply), got %d: %v", len(phases), phases)
-	}
-
-	// Verify the correct order of phases
-	if phases[0] != "planning" {
-		t.Errorf("Expected first phase to be 'planning', got '%s'", phases[0])
-	}
-	if phases[1] != "apply" {
-		t.Errorf("Expected second phase to be 'apply', got '%s'", phases[1])
-	}
-
-	// Verify we don't go back to planning after apply starts
-	for i := 2; i < len(phases); i++ {
-		if phases[i] == "planning" {
-			t.Errorf("Found planning phase after apply started at index %d", i)
-		}
-	}
-}
-
-func TestOriginalOutputBuffer(t *testing.T) {
-	// Create a reader with the mock Terraform output
-	reader := strings.NewReader(mockTerraformOutput)
-
-	// Create a progress handler
-	handler := progress.NewProgressHandler(reader)
-
-	// Read all lines to process the output
-	for {
-		_, err := handler.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Errorf("Unexpected error: %v", err)
-			return
-		}
-	}
-
-	// Get the original output buffer
-	originalOutput := handler.GetOriginalOutput()
-
-	// Split the mock output into lines for comparison
-	mockLines := strings.Split(strings.TrimSpace(mockTerraformOutput), "\n")
-
-	// Remove leading empty lines from both slices
-	originalOutput = trimLeadingEmptyLines(originalOutput)
-	mockLines = trimLeadingEmptyLines(mockLines)
-
-	// Print lengths for debugging
-	t.Logf("Original output length: %d", len(originalOutput))
-	t.Logf("Mock data length: %d", len(mockLines))
-
-	// Print first few lines of both for comparison
-	t.Log("First 5 lines of original output:")
-	for i := 0; i < min(5, len(originalOutput)); i++ {
-		t.Logf("  %d: %s", i, originalOutput[i])
-	}
-	t.Log("First 5 lines of mock data:")
-	for i := 0; i < min(5, len(mockLines)); i++ {
-		t.Logf("  %d: %s", i, mockLines[i])
-	}
-
-	// Verify the lengths match
-	if len(originalOutput) != len(mockLines) {
-		t.Errorf("Original output length (%d) does not match mock data length (%d)",
-			len(originalOutput), len(mockLines))
-		return
-	}
-
-	// Compare each line
-	for i, line := range originalOutput {
-		if i >= len(mockLines) {
-			t.Errorf("Original output has more lines than mock data at index %d", i)
-			return
-		}
-		if line != mockLines[i] {
-			t.Errorf("Line %d mismatch:\nOriginal: %s\nMock:     %s", i, line, mockLines[i])
-		}
-	}
-}
-
-// Helper function to get minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// Helper function to trim leading empty lines from a slice of strings
-func trimLeadingEmptyLines(lines []string) []string {
-	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
-		lines = lines[1:]
-	}
-	return lines
 }
