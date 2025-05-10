@@ -68,9 +68,7 @@ func main() {
     lines := strings.Split(output, "\n")
     for _, line := range lines {
         if line != "" {
-            // Send the line to LEMC's UI buffer with trunc
-            fmt.Printf("lemc.html.buffer; %s\n", strings.TrimSpace(line))
-            fmt.Println("lemc.html.trunc;")
+            fmt.Printf("lemc.html.trunc; %s\n", strings.TrimSpace(line))
         }
     }
 
