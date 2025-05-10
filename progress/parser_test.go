@@ -134,7 +134,7 @@ done:
 	}
 
 	// Check for total steps
-	expectedTotalStepsStr := "(18)"
+	expectedTotalStepsStr := "(36)"
 	foundTotalSteps := false
 	for _, line := range lines {
 		if strings.Contains(line, expectedTotalStepsStr) {
@@ -245,7 +245,7 @@ done:
 	}
 
 	// Check for total steps
-	expectedTotalStepsStr := "(18)"
+	expectedTotalStepsStr := "(36)" // Destroy operation has 36 total steps
 	foundTotalSteps := false
 	for _, line := range lines {
 		if strings.Contains(line, expectedTotalStepsStr) {
@@ -346,7 +346,7 @@ func TestGetProgressOutput(t *testing.T) {
 
 	// Check for total steps
 	// From the log: "Plan: 18 to add, 0 to change, 0 to destroy."
-	expectedTotalStepsStr := "(18)"
+	expectedTotalStepsStr := "(36)"
 	foundTotalSteps := false
 	for _, line := range lines {
 		if strings.Contains(line, expectedTotalStepsStr) {
@@ -501,7 +501,7 @@ func TestProgressHandler(t *testing.T) {
 	}
 
 	// Check for total steps
-	expectedTotalStepsStr := "(18)"
+	expectedTotalStepsStr := "(36)"
 	foundTotalSteps := false
 	for _, line := range lines {
 		if strings.Contains(line, expectedTotalStepsStr) {
@@ -659,7 +659,7 @@ done:
 	// Test the output format and content
 	t.Run("Output Format", func(t *testing.T) {
 		// Check for total steps
-		expectedTotalStepsStr := "(18)"
+		expectedTotalStepsStr := "(36)"
 		foundTotalSteps := false
 		for _, line := range lines {
 			if strings.Contains(line, expectedTotalStepsStr) {
