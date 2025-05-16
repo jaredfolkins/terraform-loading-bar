@@ -9,6 +9,18 @@ import (
 	"time"
 )
 
+// TrimLength controls how many characters of the message are retained
+// before being truncated with an ellipsis. The default is 48.
+var TrimLength = 48
+
+// SetTrimLength allows callers to change the message trimming length.
+// Values under 4 are ignored to ensure space for the ellipsis.
+func SetTrimLength(n int) {
+	if n >= 4 {
+		TrimLength = n
+	}
+}
+
 // TerraformLogEntry represents a generic log entry from Terraform JSON output.
 type TerraformLogEntry struct {
 	Level      string                 `json:"@level"`
@@ -427,9 +439,9 @@ func getProgressString(current, total, width int, message string, isPlanning boo
 	message = strings.ReplaceAll(message, "\r", " ")
 	message = strings.TrimSpace(message)
 
-	// Trim message to 48 chars with 3 dots
-	maxMsgLen := 48
-	if len(message) > maxMsgLen {
+	// Trim message to the configured length with 3 dots
+	maxMsgLen := TrimLength
+	if len(message) > maxMsgLen && maxMsgLen > 3 {
 		message = message[:maxMsgLen-3] + "..."
 	}
 

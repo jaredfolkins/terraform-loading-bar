@@ -193,6 +193,16 @@ func main() {
 }
 ```
 
+### Customizing Message Trimming
+
+By default, long messages are truncated to keep the progress bar output on a
+single line. You can adjust how many characters are retained before the
+ellipsis is added:
+
+```go
+progress.SetTrimLength(60) // allow up to 60 characters
+```
+
 ### Getting Progress Output as String
 
 If you want to get the progress output as a string instead of printing it directly, you can use the `GetProgressOutput` function:
